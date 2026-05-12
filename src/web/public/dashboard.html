@@ -196,7 +196,19 @@ function loadDemands() {
   var el = document.getElementById('demands-content');
   el.innerHTML = '<div class="loading">🔍 加载需求排名...</div>';
 
-  api(API + '/demands').then(function(r) { return r.json(); }).then(function(data) {
+  api(API + '/demands').then(function(r) {
+    // 先检查content-type，防HTML响应被当JSON解析
+    var ct = r.headers.get('content-type') || '';
+    if (r.status === 401) {
+      localStorage.clear();
+      window.location.href = '/login';
+      throw new Error('登录已过期');
+    }
+    if (!ct.includes('application/json')) {
+      throw new Error('服务重启中，请稍候刷新');
+    }
+    return r.json();
+  }).then(function(data) {
     if (data.code === 'AUTH_REQUIRED') { localStorage.removeItem('rdm_token'); window.location.href = '/login'; return; }
     if (data.error) { el.innerHTML = '<div class="empty"><h3>暂无数据</h3><p>点击"刷新数据"采集 Reddit / Amazon / AliExpress / Shopee / eBay 等平台</p></div>'; return; }
 
@@ -235,8 +247,9 @@ function loadDemands() {
 
     el.innerHTML = html;
   }).catch(function(e) {
-    el.innerHTML = '<div class="empty"><h3>加载失败</h3><p>' + e.message + '</p></div>';
-  });
+    el.innerHTML = '<div class="empty"><h3>💤 数据加载中</h3><p>服务预热中，30秒后自动重试...</p><button class="btn btn-primary" style="margin-top:12px" onclick="loadDemands()">🔄 现在重试</button></div>';
+    // 30秒后自动重试
+    setTimeout(function() { if (document.getElementById('demands-content').innerHTML.includes('数据加载中')) loadDemands(); }, 30000);
 }
 
 // ========== 需求详情 ==========

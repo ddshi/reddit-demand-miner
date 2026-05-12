@@ -303,6 +303,8 @@ app.listen(PORT, () => {
 
 // 自动预热：部署后自动填充数据
 async function autoWarmUp() {
+  // 延迟启动，让Web服务先接受请求
+  await new Promise(r => setTimeout(r, 3000));
   try {
     const db = getDb();
     const { cnt } = db.prepare('SELECT COUNT(*) as cnt FROM demand_scores').get();
@@ -321,9 +323,11 @@ async function autoWarmUp() {
       const ecomResult = await collectAllEcommerce(10);
       console.log(`📥 电商采集完成: ${ecomResult.total}条, 新增${ecomResult.new}条`);
     }
-    console.log('🧠 启动自动AI评分（15条）...');
-    const scoreResult = await scoreAllUnscored(15);
-    console.log(`✅ 自动评分完成: ${scoreResult.scored}条`);
+    console.log('🧠 启动自动AI评分（先评5条快速出结果）...');
+    const scoreResult = await scoreAllUnscored(5);
+    console.log(`✅ 首批评分完成: ${scoreResult.scored}条`);
+    // 后台继续评分剩余
+    scoreAllUnscored(25).then(r => console.log(`✅ 补充评分完成: ${r.scored}条`)).catch(() => {});
   } catch (e) {
     console.error('⚠️ 自动预热失败（不影响服务）:', e.message);
   }
