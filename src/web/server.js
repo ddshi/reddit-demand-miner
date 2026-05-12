@@ -4,6 +4,7 @@
  */
 import express from 'express';
 import path from 'path';
+import fs from 'fs';
 import dotenv from 'dotenv';
 import { fileURLToPath } from 'url';
 
@@ -235,6 +236,55 @@ app.post('/api/admin/codes', (req, res) => {
   res.json({ codes });
 });
 
+// ============ 用户数据备份/恢复 ============
+const BACKUP_PATH = path.join(__dirname, '..', '..', 'data', 'users_backup.json');
+
+// 导出所有用户数据（管理员调用，部署前备份）
+app.get('/api/admin/backup', (req, res) => {
+  try {
+    const db = getDb();
+    const users = db.prepare('SELECT * FROM users').all();
+    const sessions = db.prepare('SELECT * FROM sessions').all();
+    res.json({ users, sessions, exported_at: new Date().toISOString() });
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
+// 从备份文件恢复用户数据
+function restoreUsersFromBackup() {
+  try {
+    if (!fs.existsSync(BACKUP_PATH)) {
+      console.log('📭 无用户备份文件，跳过恢复');
+      return;
+    }
+    const backup = JSON.parse(fs.readFileSync(BACKUP_PATH, 'utf-8'));
+    if (!backup.users || backup.users.length === 0) {
+      console.log('📭 备份文件无用户数据');
+      return;
+    }
+    const db = getDb();
+    const { cnt } = db.prepare('SELECT COUNT(*) as cnt FROM users').get();
+    if (cnt > 0) {
+      console.log(`✅ 已有 ${cnt} 个用户，跳过恢复`);
+      return;
+    }
+    const insU = db.prepare(`INSERT OR IGNORE INTO users (id, email, password_hash, membership, membership_expires_at, created_at, last_login_at) VALUES (?, ?, ?, ?, ?, ?, ?)`);
+    for (const u of backup.users) {
+      insU.run(u.id, u.email, u.password_hash, u.membership || 'free', u.membership_expires_at, u.created_at, u.last_login_at);
+    }
+    if (backup.sessions) {
+      const insS = db.prepare(`INSERT OR IGNORE INTO sessions (token, user_id, created_at, expires_at) VALUES (?, ?, ?, ?)`);
+      for (const s of backup.sessions) {
+        if (new Date(s.expires_at) > new Date()) insS.run(s.token, s.user_id, s.created_at, s.expires_at);
+      }
+    }
+    console.log(`💾 已从备份恢复 ${backup.users.length} 个用户`);
+  } catch (e) {
+    console.error('⚠️ 备份恢复失败:', e.message);
+  }
+}
+
 // ============ 启动服务 ============
 app.listen(PORT, () => {
   console.log('\n╔══════════════════════════════════════════╗');
@@ -245,6 +295,8 @@ app.listen(PORT, () => {
   console.log(`║   API: http://localhost:${PORT}/api/health    ║`);
   console.log('╚══════════════════════════════════════════╝');
 
+  // 先恢复用户数据，再采集需求数据
+  restoreUsersFromBackup();
   // 启动自动预热：如果数据库为空，自动采集+评分
   autoWarmUp();
 });
@@ -264,13 +316,13 @@ async function autoWarmUp() {
       // 社区数据源
       const communityResult = await collectAllSources({ limit: 50 });
       console.log(`📥 社区采集完成: ${communityResult.total}条, 新增${communityResult.new}条`);
-      // 电商数据源
-      console.log('🛒 正在采集电商平台数据...');
-      const ecomResult = await collectAllEcommerce(15);
+      // 电商数据源（跳过Amazon反爬失败，只采Ali/Shopee/eBay）
+      console.log('🛒 正在采集电商平台数据（AliExpress + Shopee + eBay）...');
+      const ecomResult = await collectAllEcommerce(10);
       console.log(`📥 电商采集完成: ${ecomResult.total}条, 新增${ecomResult.new}条`);
     }
-    console.log('🧠 启动自动AI评分...');
-    const scoreResult = await scoreAllUnscored(30);
+    console.log('🧠 启动自动AI评分（15条）...');
+    const scoreResult = await scoreAllUnscored(15);
     console.log(`✅ 自动评分完成: ${scoreResult.scored}条`);
   } catch (e) {
     console.error('⚠️ 自动预热失败（不影响服务）:', e.message);

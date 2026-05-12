@@ -684,12 +684,15 @@ export async function collectAllEcommerce(limit = 25) {
   const perPlatform = Math.max(10, Math.floor(limit / 2));
   const results = {};
 
-  try {
-    results.amazon = await collectAmazon(perPlatform);
-  } catch (e) {
-    console.error('Amazon 采集失败:', e.message);
-    results.amazon = { source: 'amazon', total: 0, new: 0, items: [], error: e.message };
-  }
+  // Amazon暂禁用（fetch反爬只产垃圾，需Playwright升级）
+  results.amazon = { source: 'amazon', total: 0, new: 0, items: [], note: 'Amazon暂时禁用（需Playwright升级）' };
+
+  // try {
+  //   results.amazon = await collectAmazon(perPlatform);
+  // } catch (e) {
+  //   console.error('Amazon 采集失败:', e.message);
+  //   results.amazon = { source: 'amazon', total: 0, new: 0, items: [], error: e.message };
+  // }
 
   try {
     results.aliexpress = await collectAliExpress(perPlatform);
