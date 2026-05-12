@@ -108,7 +108,7 @@ input:focus{border-color:#58a6ff}
       <div class="actions">
         <input type="text" id="activateInput" placeholder="激活码..." style="width:140px;font-size:12px" onkeyup="if(event.key==='Enter')doActivate()">
         <button class="btn btn-warning" onclick="doActivate()" style="font-size:12px">激活Pro</button>
-        <button class="btn btn-secondary" onclick="collectData()" id="collectBtn" style="font-size:12px">🔄 刷新数据 (Reddit/HN/Amazon/Shopee/eBay)</button>
+        <button class="btn btn-secondary" onclick="collectData()" id="collectBtn" style="font-size:12px">🔄 刷新数据 (Reddit/Amazon/AliExpress/Shopee/eBay)</button>
       </div>
     </div>
     <div id="demands-content"><div class="loading">加载中...</div></div>
@@ -198,14 +198,14 @@ function loadDemands() {
 
   api(API + '/demands').then(function(r) { return r.json(); }).then(function(data) {
     if (data.code === 'AUTH_REQUIRED') { localStorage.removeItem('rdm_token'); window.location.href = '/login'; return; }
-    if (data.error) { el.innerHTML = '<div class="empty"><h3>暂无数据</h3><p>点击"刷新数据"采集 Reddit / HN / Amazon / Shopee / eBay 等平台</p></div>'; return; }
+    if (data.error) { el.innerHTML = '<div class="empty"><h3>暂无数据</h3><p>点击"刷新数据"采集 Reddit / Amazon / AliExpress / Shopee / eBay 等平台</p></div>'; return; }
 
     document.getElementById('userPlan').textContent = data.membership.toUpperCase();
     CURRENT_USER.membership = data.membership;
     localStorage.setItem('rdm_user', JSON.stringify(CURRENT_USER));
 
     if (!data.demands || !data.demands.length) {
-      el.innerHTML = '<div class="empty"><h3>📡 还没有需求数据</h3><p>点击右上角"刷新数据"开始采集 Reddit / HN / Amazon / Shopee / eBay</p><button class="btn btn-primary" style="margin-top:12px" onclick="collectData()">🔄 立即采集</button></div>';
+      el.innerHTML = '<div class="empty"><h3>📡 还没有需求数据</h3><p>点击右上角"刷新数据"开始采集 Reddit / Amazon / AliExpress / Shopee / eBay</p><button class="btn btn-primary" style="margin-top:12px" onclick="collectData()">🔄 立即采集</button></div>';
       return;
     }
 
@@ -288,11 +288,11 @@ function closeDetail() {
 function collectData() {
   var btn = document.getElementById('collectBtn');
   btn.disabled = true; btn.textContent = '⏳ 采集中...';
-  showToast('📡 正在从 Reddit / HN / Amazon / Shopee / eBay / GitHub 采集数据...', 'success');
+  showToast('📡 正在从 Reddit / Amazon / AliExpress / Shopee / eBay 采集数据...', 'success');
 
   api(API + '/collect', { method: 'POST' }).then(function(r) { return r.json(); }).then(function(data) {
     showToast('✅ 采集完成: ' + data.total + '条, 新增 ' + data.new + '条', 'success');
-    btn.disabled = false; btn.textContent = '🔄 刷新数据 (Reddit/HN/Amazon/Shopee/eBay)';
+    btn.disabled = false; btn.textContent = '🔄 刷新数据 (Reddit/Amazon/AliExpress/Shopee/eBay)';
     // 自动触发评分
     showToast('🧠 正在AI评分...', 'success');
     return api(API + '/score', { method: 'POST' }).then(function(r) { return r.json(); });
@@ -301,7 +301,7 @@ function collectData() {
     loadDemands();
   }).catch(function(e) {
     showToast('❌ ' + e.message, 'error');
-    btn.disabled = false; btn.textContent = '🔄 刷新数据 (Reddit/HN/Amazon/Shopee/eBay)';
+    btn.disabled = false; btn.textContent = '🔄 刷新数据 (Reddit/Amazon/AliExpress/Shopee/eBay)';
   });
 }
 
