@@ -145,9 +145,6 @@ export function initDb() {
       completed_at TEXT
     );
 
-    -- 升级：添加 is_admin 列（兼容旧库）
-    ALTER TABLE users ADD COLUMN is_admin INTEGER DEFAULT 0;
-
     -- 索引
     CREATE INDEX IF NOT EXISTS idx_users_email ON users(email);
     CREATE INDEX IF NOT EXISTS idx_posts_source ON demand_posts(source);
@@ -157,6 +154,15 @@ export function initDb() {
     CREATE INDEX IF NOT EXISTS idx_sessions_token ON sessions(token);
     CREATE INDEX IF NOT EXISTS idx_sessions_expires ON sessions(expires_at);
   `);
+
+  // 升级旧库：添加 is_admin 列（Safe-add 不抛异常）
+  try {
+    db.prepare('ALTER TABLE users ADD COLUMN is_admin INTEGER DEFAULT 0').run();
+    console.log('✅ is_admin 列已添加');
+  } catch (e) {
+    // 列已存在，忽略（SQLite 3.35+ 用 IF NOT EXISTS，兼容旧版用 try-catch）
+    if (!e.message.includes('duplicate')) console.log('ℹ️ is_admin 列已存在，跳过');
+  }
 
   // 初始化管理员激活码
   const existingCodes = db.prepare('SELECT COUNT(*) as cnt FROM activation_codes').get();
