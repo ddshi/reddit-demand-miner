@@ -167,46 +167,34 @@ app.get('/api/report', (req, res) => {
   res.json(result);
 });
 
-// ============ 数据采集（需Pro或管理员） ============
+// ============ 数据采集（异步后台执行） ============
 app.post('/api/collect', (req, res) => {
   const user = checkMembership(req.user_id);
   const source = (req.body?.source || req.query?.source || '').toLowerCase();
 
-  let promise;
-  switch (source) {
-    case 'amazon':
-      promise = collectAmazon(50);
-      break;
-    case 'aliexpress':
-      promise = collectAliExpress(30);
-      break;
-    case 'shopee':
-      promise = collectShopee(35);
-      break;
-    case 'ebay':
-      promise = collectEbay(25);
-      break;
-    case 'ecommerce':
-      promise = collectAllEcommerce(20);
-      break;
-    default:
-      // 全部采集: 社区+电商
-      promise = Promise.all([
-        collectAllSources({ limit: 100 }),
-        collectAllEcommerce(15)
-      ]).then(([community, ecommerce]) => ({
-        community,
-        ecommerce,
-        total: (community?.total || 0) + (ecommerce?.total || 0),
-        new: (community?.new || 0) + (ecommerce?.new || 0)
-      }));
-  }
+  // 立即返回，采集+评分在后台异步执行
+  res.json({ queued: true, message: '采集任务已加入后台队列，预计2-3分钟完成' });
 
-  promise.then(result => {
-    res.json(result);
-  }).catch(e => {
-    res.status(500).json({ error: e.message });
-  });
+  // 后台执行
+  (async () => {
+    try {
+      let result;
+      switch (source) {
+        case 'amazon': result = await collectAmazon(50); break;
+        case 'aliexpress': result = await collectAliExpress(30); break;
+        case 'shopee': result = await collectShopee(35); break;
+        case 'ebay': result = await collectEbay(25); break;
+        case 'ecommerce': result = await collectAllEcommerce(20); break;
+        default:
+          result = await Promise.all([collectAllSources({ limit: 50 }), collectAllEcommerce(15)]);
+      }
+      console.log('📥 后台采集完成，启动自动评分...');
+      await scoreAllUnscored(30);
+      console.log('✅ 后台采集+评分全部完成');
+    } catch (e) {
+      console.error('⚠️ 后台采集失败:', e.message);
+    }
+  })();
 });
 
 // ============ AI评分（管理员） ============

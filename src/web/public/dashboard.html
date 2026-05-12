@@ -284,21 +284,29 @@ function closeDetail() {
   document.getElementById('detailModal').classList.remove('show');
 }
 
-// ========== 数据采集 ==========
+// ========== 数据采集（异步+轮询） ==========
 function collectData() {
   var btn = document.getElementById('collectBtn');
-  btn.disabled = true; btn.textContent = '⏳ 采集中...';
-  showToast('📡 正在从 Reddit / Amazon / AliExpress / Shopee / eBay 采集数据...', 'success');
+  btn.disabled = true; btn.textContent = '⏳ 已加入后台...';
+  showToast('⏳ 采集已启动，后台执行中...', 'success');
 
   api(API + '/collect', { method: 'POST' }).then(function(r) { return r.json(); }).then(function(data) {
-    showToast('✅ 采集完成: ' + data.total + '条, 新增 ' + data.new + '条', 'success');
-    btn.disabled = false; btn.textContent = '🔄 刷新数据 (Reddit/Amazon/AliExpress/Shopee/eBay)';
-    // 自动触发评分
-    showToast('🧠 正在AI评分...', 'success');
-    return api(API + '/score', { method: 'POST' }).then(function(r) { return r.json(); });
-  }).then(function(scoreData) {
-    showToast('✅ AI评分完成: ' + (scoreData.scored || 0) + '条', 'success');
-    loadDemands();
+    showToast('⏳ ' + (data.message || '采集中，预计2-3分钟'), 'success');
+    // 轮询等待采集完成
+    var attempts = 0;
+    var poll = setInterval(function() {
+      api(API + '/health').then(function(r) { return r.json(); }).then(function(h) {
+        attempts++;
+        btn.textContent = '⏳ 后台处理中...(' + (attempts * 3) + 's)';
+        if (h.scored > 0 || attempts > 30) {
+          clearInterval(poll);
+          btn.disabled = false;
+          btn.textContent = '🔄 刷新数据 (Reddit/Amazon/AliExpress/Shopee/eBay)';
+          showToast('✅ 完成: ' + h.posts + '条数据, ' + h.scored + '条已评分', 'success');
+          loadDemands();
+        }
+      }).catch(function() {});
+    }, 3000);
   }).catch(function(e) {
     showToast('❌ ' + e.message, 'error');
     btn.disabled = false; btn.textContent = '🔄 刷新数据 (Reddit/Amazon/AliExpress/Shopee/eBay)';
