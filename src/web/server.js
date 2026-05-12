@@ -397,57 +397,26 @@ app.listen(PORT, () => {
   autoWarmUp();
 });
 
-// 自动预热：分步进行，绝不阻塞请求
-// 策略：60秒后才启动采集 → 分小批 → 批间yield → 绝不阻塞HTTP
+// 部署后检查：提示用户数据库状态，不自动采集（避免阻塞 Railway 健康检查）
 async function autoWarmUp() {
-  // 60秒延迟，给服务足够时间处理注册/登录等请求
-  await new Promise(r => setTimeout(r, 60000));
-
-  async function yieldEventLoop() {
-    // 每处理一批后释放事件循环，让HTTP请求有机会执行
-    await new Promise(r => setImmediate(r));
-  }
-
-  async function collectWithYield(sourceName, collector, args) {
-    await yieldEventLoop();
-    console.log(`📥 [预热] 开始采集 ${sourceName}...`);
-    try {
-      const result = await collector(...args);
-      console.log(`✅ [预热] ${sourceName} 完成: ${result.total}条, 新增${result.new}条`);
-      return result;
-    } catch (e) {
-      console.log(`⚠️ [预热] ${sourceName} 失败:`, e.message);
-      return { total: 0, new: 0 };
-    }
-  }
-
+  // 启动后等待，确保健康检查通过
+  await new Promise(r => setTimeout(r, 10000));
   try {
     const db = getDb();
     const { cnt } = db.prepare('SELECT COUNT(*) as cnt FROM demand_scores').get();
     if (cnt > 0) {
-      console.log(`✅ 已有 ${cnt} 条已评分数据，跳过预热`);
+      console.log(`✅ 已有 ${cnt} 条已评分数据，就绪`);
       return;
     }
     const { total } = db.prepare('SELECT COUNT(*) as total FROM demand_posts').get();
     if (total === 0) {
-      console.log('🔔 [预热] 数据库为空，60秒后逐步采集（不阻塞请求）...');
-      // 社区数据源（小批量，batch间yield）
-      await collectWithYield('Reddit社区', collectAllSources, [{ limit: 20 }]);
-      // 电商数据源
-      await collectWithYield('电商平台', collectAllEcommerce, [5]);
+      console.log('📭 数据库为空，请在前端点击"刷新数据"开始采集');
+    } else {
+      // 有帖子但未评分：后台异步评分（不阻塞）
+      console.log(`📊 已有 ${total} 条未评分数据，后台异步评分...`);
+      scoreAllUnscored(10).then(r => console.log(`✅ 后台评分: ${r.scored}条`)).catch(() => {});
     }
-    // 评分也分小批
-    await yieldEventLoop();
-    console.log('🧠 [预热] 启动AI评分（5条）...');
-    try {
-      const scoreResult = await scoreAllUnscored(5);
-      console.log(`✅ [预热] 首批评分: ${scoreResult.scored}条`);
-    } catch (e) {
-      console.log('⚠️ [预热] 评分失败:', e.message);
-    }
-    // 剩余评分在后台，不阻塞
-    scoreAllUnscored(20).then(r => console.log(`✅ 补充评分: ${r.scored}条`)).catch(() => {});
   } catch (e) {
-    console.error('⚠️ 自动预热失败（不影响服务）:', e.message);
+    console.error('⚠️ 启动检查失败（不影响服务）:', e.message);
   }
 }
