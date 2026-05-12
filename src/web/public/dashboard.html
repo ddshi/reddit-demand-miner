@@ -194,6 +194,7 @@ function loadDemands() {
   el.innerHTML = '<div class="loading">🔍 加载需求排名...</div>';
 
   api(API + '/demands').then(function(r) { return r.json(); }).then(function(data) {
+    if (data.code === 'AUTH_REQUIRED') { localStorage.removeItem('rdm_token'); window.location.href = '/login'; return; }
     if (data.error) { el.innerHTML = '<div class="empty"><h3>暂无数据</h3><p>点击"刷新数据"采集Reddit/HN/V2EX</p></div>'; return; }
 
     document.getElementById('userPlan').textContent = data.membership.toUpperCase();
