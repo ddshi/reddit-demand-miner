@@ -151,8 +151,8 @@ export function getTopDemands(userId, limit = 10) {
   // 列表不返回 body（太大了，拖慢加载），详情接口单独取
   // DB列名 → 新维度映射: reddit_signal=市场趋势, market_demand=需求验证, competition_gap=竞争密度, monetization=利润空间, feasibility=入场难度
   const demands = db.prepare(`
-    SELECT p.id, p.source, p.source_id, p.title, p.url, p.subreddit,
-      p.author, p.upvotes, p.comments_count, p.collected_at,
+    SELECT p.id, p.source, p.source_url as url, p.title, p.subreddit,
+      p.author, p.upvotes, p.comments_count, p.posted_at as collected_at,
       s.total_score, s.user_need_summary,
       s.reddit_signal as market_trend_score,
       s.competition_gap as competition_density_score,
@@ -188,8 +188,8 @@ export function getDemandDetail(userId, postId) {
   const plan = getUserPlan(userId);
 
   const post = db.prepare(`
-    SELECT p.id, p.source, p.source_id, p.title, p.url, p.subreddit,
-      p.author, p.upvotes, p.comments_count, p.collected_at,
+    SELECT p.id, p.source, p.source_url as url, p.title, p.subreddit,
+      p.author, p.upvotes, p.comments_count, p.posted_at as collected_at,
       p.body,
       s.total_score, s.user_need_summary,
       s.reddit_signal as market_trend_score,
