@@ -176,7 +176,10 @@ function showToast(msg, type) {
 function api(url, opts) {
   opts = opts || {};
   opts.headers = Object.assign({}, opts.headers, { 'Authorization': 'Bearer ' + TOKEN });
-  return fetch(url, opts);
+  return fetch(url, opts).then(function(r) {
+    if (r.status === 401) { localStorage.removeItem('rdm_token'); localStorage.removeItem('rdm_user'); window.location.href = '/login'; throw new Error('AUTH_EXPIRED'); }
+    return r;
+  });
 }
 
 function showTab(name, el) {
