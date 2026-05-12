@@ -223,4 +223,30 @@ app.listen(PORT, () => {
   console.log(`║   Web: http://localhost:${PORT}               ║`);
   console.log(`║   API: http://localhost:${PORT}/api/health    ║`);
   console.log('╚══════════════════════════════════════════╝');
+
+  // 启动自动预热：如果数据库为空，自动采集+评分
+  autoWarmUp();
 });
+
+// 自动预热：部署后自动填充数据
+async function autoWarmUp() {
+  try {
+    const db = getDb();
+    const { cnt } = db.prepare('SELECT COUNT(*) as cnt FROM demand_scores').get();
+    if (cnt > 0) {
+      console.log(`✅ 已有 ${cnt} 条已评分数据，跳过预热`);
+      return;
+    }
+    const { total } = db.prepare('SELECT COUNT(*) as total FROM demand_posts').get();
+    if (total === 0) {
+      console.log('🔄 数据库为空，启动自动采集...');
+      const result = await collectAllSources({ limit: 50 });
+      console.log(`📥 采集完成: ${result.total}条, 新增${result.new}条`);
+    }
+    console.log('🧠 启动自动AI评分...');
+    const scoreResult = await scoreAllUnscored(30);
+    console.log(`✅ 自动评分完成: ${scoreResult.scored}条`);
+  } catch (e) {
+    console.error('⚠️ 自动预热失败（不影响服务）:', e.message);
+  }
+}
