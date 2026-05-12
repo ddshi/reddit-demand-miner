@@ -251,11 +251,11 @@ function openDetail(postId) {
     if (data.error) { el.innerHTML = '<p style="color:#f85149">' + data.error + '</p>'; return; }
 
     var scores = [
-      { name: 'Reddit信号', val: data.reddit_signal || 0, weight: '30%', cls:'bar-g1' },
-      { name: '市场需求', val: data.market_demand || 0, weight: '25%', cls:'bar-g2' },
-      { name: '竞争缺口', val: data.competition_gap || 0, weight: '20%', cls:'bar-g3' },
-      { name: '变现能力', val: data.monetization || 0, weight: '15%', cls:'bar-g4' },
-      { name: '可行度', val: data.feasibility || 0, weight: '10%', cls:'bar-g5' }
+      { name: '市场趋势', val: data.market_trend_score || 0, weight: '25%', cls:'bar-g1' },
+      { name: '竞争密度', val: data.competition_density_score || 0, weight: '25%', cls:'bar-g2' },
+      { name: '利润空间', val: data.profit_margin_score || 0, weight: '20%', cls:'bar-g3' },
+      { name: '入场难度', val: data.entry_barrier_score || 0, weight: '15%', cls:'bar-g4' },
+      { name: '需求验证', val: data.demand_validation_score || 0, weight: '15%', cls:'bar-g5' }
     ];
 
     var scoreHtml = '<div class="score-grid">' + scores.map(function(s) {

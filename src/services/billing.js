@@ -148,9 +148,18 @@ export function getTopDemands(userId, limit = 10) {
   const plan = getUserPlan(userId);
   const actualLimit = Math.min(limit, plan.top_limit);
 
+  // 列表不返回 body（太大了，拖慢加载），详情接口单独取
+  // DB列名 → 新维度映射: reddit_signal=市场趋势, market_demand=需求验证, competition_gap=竞争密度, monetization=利润空间, feasibility=入场难度
   const demands = db.prepare(`
-    SELECT p.*, s.total_score, s.user_need_summary, s.reddit_signal, s.market_demand,
-      s.competition_gap, s.monetization, s.feasibility, s.pay_signals_count, s.competitor_list
+    SELECT p.id, p.source, p.source_id, p.title, p.url, p.subreddit,
+      p.author, p.upvotes, p.comments_count, p.collected_at,
+      s.total_score, s.user_need_summary,
+      s.reddit_signal as market_trend_score,
+      s.competition_gap as competition_density_score,
+      s.monetization as profit_margin_score,
+      s.feasibility as entry_barrier_score,
+      s.market_demand as demand_validation_score,
+      s.pay_signals_count, s.competitor_list
     FROM demand_posts p
     JOIN demand_scores s ON s.post_id = p.id
     WHERE s.total_score > 0
@@ -179,13 +188,27 @@ export function getDemandDetail(userId, postId) {
   const plan = getUserPlan(userId);
 
   const post = db.prepare(`
-    SELECT p.*, s.*
+    SELECT p.id, p.source, p.source_id, p.title, p.url, p.subreddit,
+      p.author, p.upvotes, p.comments_count, p.collected_at,
+      p.body,
+      s.total_score, s.user_need_summary,
+      s.reddit_signal as market_trend_score,
+      s.competition_gap as competition_density_score,
+      s.monetization as profit_margin_score,
+      s.feasibility as entry_barrier_score,
+      s.market_demand as demand_validation_score,
+      s.pay_signals_count, s.competitor_list
     FROM demand_posts p
     JOIN demand_scores s ON s.post_id = p.id
     WHERE p.id = ?
   `).get(postId);
 
   if (!post) return { error: '需求不存在' };
+
+  // 截断body避免传输过大拖慢详情页
+  if (post.body && post.body.length > 500) {
+    post.body = post.body.substring(0, 500) + '...';
+  }
 
   let handbook = null;
   if (plan.has_handbook) {
