@@ -57,7 +57,7 @@ app.get('/api/health', (req, res) => {
       (SELECT COUNT(*) FROM demand_scores) as scored,
       (SELECT COUNT(*) FROM users) as users
   `).get();
-  res.json({ status: 'ok', service: 'Reddit需求矿工 v1.0', ...stats });
+  res.json({ status: 'ok', service: '蓝海选品雷达 v2.0', ...stats });
 });
 
 // ============ 套餐信息（公开） ============

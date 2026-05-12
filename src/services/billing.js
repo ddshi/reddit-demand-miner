@@ -153,6 +153,7 @@ export function getTopDemands(userId, limit = 10) {
       s.competition_gap, s.monetization, s.feasibility, s.pay_signals_count, s.competitor_list
     FROM demand_posts p
     JOIN demand_scores s ON s.post_id = p.id
+    WHERE s.total_score > 0
     ORDER BY s.total_score DESC
     LIMIT ?
   `).all(actualLimit);
@@ -215,6 +216,7 @@ export function getDailyReport(userId) {
     SELECT p.*, s.total_score, s.user_need_summary
     FROM demand_posts p
     JOIN demand_scores s ON s.post_id = p.id
+    WHERE s.total_score > 0
     ORDER BY s.total_score DESC
     LIMIT 10
   `).all();

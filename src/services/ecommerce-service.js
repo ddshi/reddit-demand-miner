@@ -65,6 +65,25 @@ function parsePrice(s) {
   return m ? parseFloat(m[0].replace(/,/g, '')) : 0;
 }
 
+/** 垃圾信号过滤：判断内容是否为网页元素而非真实商品 */
+const GARBAGE_PATTERNS = [
+  /^pagination$/i, /^next page$/i, /^previous/i, /^page \d/i,
+  /^sort by/i, /^filter by/i, /^results for/i, /^search/i,
+  /^browse by/i, /^categories$/i, /^department$/i,
+  /^back to top$/i, /^back to results$/i, /^add to cart$/i,
+  /^\d+\s*(results|items|products)\s*(found|available)/i,
+  /^best sellers in/i, /^new releases in/i,
+];
+
+function isGarbageSignal(title, body) {
+  if (!title || title.trim().length < 5) return true;
+  const combined = (title + ' ' + (body || '')).toLowerCase();
+  for (const p of GARBAGE_PATTERNS) {
+    if (p.test(combined)) return true;
+  }
+  return false;
+}
+
 /** 统一入库 */
 function insertItems(db, items) {
   const insertPost = db.prepare(`
@@ -75,6 +94,10 @@ function insertItems(db, items) {
   let newCount = 0;
   for (const item of items) {
     if (!item.title) continue;
+    if (isGarbageSignal(item.title, item.body || '')) {
+      console.log(`  🗑️ 垃圾信号过滤: "${item.title.substring(0, 50)}"`);
+      continue;
+    }
     const result = insertPost.run(
       item.source,
       item.source_url || '',

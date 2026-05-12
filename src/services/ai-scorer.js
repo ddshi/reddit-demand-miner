@@ -1,6 +1,7 @@
 /**
- * Reddit需求矿工 — AI需求评分引擎
+ * 蓝海选品雷达 — AI选品评分引擎
  * 用DeepSeek对每条需求做多维度打分 + 生成产品挖掘手册
+ * 面向跨境电商实物商品选品
  */
 import OpenAI from 'openai';
 import { getDb } from '../db/init.js';
@@ -26,31 +27,35 @@ export async function scoreDemand(postId) {
     return db.prepare('SELECT * FROM demand_scores WHERE post_id = ?').get(postId);
   }
 
-  const prompt = `你是一个产品需求分析师。分析下面的用户帖子，按五个维度打分（0-100分），并给出分析理由。
+  const prompt = `你是跨境电商选品分析师，专门帮中国卖家在海外市场选品。分析下面抓取到的内容，判断它是不是一个真实的实物商品需求信号，并按五个维度打分。
 
-帖子标题: ${post.title}
-帖子内容: ${(post.body || '').substring(0, 1000)}
-来源: ${post.subreddit} (${post.source})
-Upvotes: ${post.upvotes}
-评论数: ${post.comments_count}
+【重要】先判断内容类型：
+- 如果是网页UI元素（如"分页/pagination/下一页/sort by/filter/results for/search"）、页面导航、搜索功能描述 → 这不是商品需求，所有维度打0分，is_physical_product 设为 false
+- 如果是真实的实物商品（如"便携榨汁杯/智能手表/瑜伽垫/LED灯带"等）→ 正常评分，is_physical_product 设为 true
 
-评分维度:
-1. Reddit信号(0-100): 用户需求真实度和社区反响
-2. 市场需求(0-100): 市场天花板和搜索需求
-3. 竞争缺口(0-100): 竞品少/做得差 → 分数高
-4. 变现能力(0-100): 付费意愿和客单价潜力
-5. 可行度(0-100): 2周可MVP+零成本启动 → 分数高
+标题: ${post.title}
+描述: ${(post.body || '').substring(0, 1000)}
+来源平台: ${post.source} | 品类: ${post.subreddit}
+热度信号: Upvotes=${post.upvotes} | 评论=${post.comments_count}
 
-请用JSON格式返回:
+评分维度（仅对实物商品有效）:
+1. market_trend(0-100): 市场趋势 — BSR排名走势、Google Trends热度、品类增长率
+2. competition_density(0-100): 竞争密度 — 竞品数量少/头部未垄断 → 高分（蓝海信号）
+3. profit_margin(0-100): 利润空间 — 1688批发价 vs 海外售价剪刀差，毛利率估算
+4. entry_barrier(0-100): 入场难度 — 认证门槛低/物流简单/启动资金少 → 高分（易入场）
+5. demand_validation(0-100): 需求验证 — 差评痛点明确/复购信号/社媒讨论热度
+
+请用JSON格式返回（只返回JSON，不要markdown包裹）:
 {
-  "reddit_signal": 数字,
-  "market_demand": 数字,
-  "competition_gap": 数字,
-  "monetization": 数字,
-  "feasibility": 数字,
-  "user_need_summary": "一句话总结用户到底想要什么",
+  "market_trend": 数字,
+  "competition_density": 数字,
+  "profit_margin": 数字,
+  "entry_barrier": 数字,
+  "demand_validation": 数字,
+  "user_need_summary": "一句话说清这个选品机会（例如：'美国市场对XXX有强需求，但现有产品差评集中在YYY，存在改进空间'）",
   "pay_signals_estimate": 数字,
-  "competitor_list": "可能的竞品名称(用逗号分隔, 无则写'无')"
+  "competitor_list": "可能的竞品品牌或ASIN(用逗号分隔, 无则写'无')",
+  "is_physical_product": true或false
 }`;
 
   try {
@@ -68,13 +73,23 @@ Upvotes: ${post.upvotes}
 
     const scores = JSON.parse(jsonMatch[0]);
     
-    // 加权总分
+    // 蓝海选品加权总分（跨境电商实物商品版）
+    // 非实物商品直接给0分
+    if (scores.is_physical_product === false) {
+      scores.market_trend = 0;
+      scores.competition_density = 0;
+      scores.profit_margin = 0;
+      scores.entry_barrier = 0;
+      scores.demand_validation = 0;
+      scores.pay_signals_estimate = 0;
+      scores.user_need_summary = '[非商品] ' + (scores.user_need_summary || '');
+    }
     const total = (
-      (scores.reddit_signal || 0) * 0.30 +
-      (scores.market_demand || 0) * 0.25 +
-      (scores.competition_gap || 0) * 0.20 +
-      (scores.monetization || 0) * 0.15 +
-      (scores.feasibility || 0) * 0.10
+      (scores.market_trend || 0) * 0.25 +
+      (scores.competition_density || 0) * 0.25 +
+      (scores.profit_margin || 0) * 0.20 +
+      (scores.entry_barrier || 0) * 0.15 +
+      (scores.demand_validation || 0) * 0.15
     );
 
     db.prepare(`
@@ -83,11 +98,11 @@ Upvotes: ${post.upvotes}
       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     `).run(
       postId,
-      scores.reddit_signal || 0,
-      scores.market_demand || 0,
-      scores.competition_gap || 0,
-      scores.monetization || 0,
-      scores.feasibility || 0,
+      scores.market_trend || 0,       // repurposed: market trend
+      scores.demand_validation || 0,  // repurposed: demand validation
+      scores.competition_density || 0,// repurposed: competition density
+      scores.profit_margin || 0,      // repurposed: profit margin
+      scores.entry_barrier || 0,      // repurposed: entry barrier
       Math.round(total * 100) / 100,
       JSON.stringify(scores),
       scores.user_need_summary || '',
@@ -95,7 +110,11 @@ Upvotes: ${post.upvotes}
       scores.competitor_list || ''
     );
 
-    console.log(`  ✅ 评分完成: "${post.title.substring(0, 40)}" → ${Math.round(total)}分`);
+    if (scores.is_physical_product === false) {
+      console.log(`  🗑️ 非商品跳过: "${post.title.substring(0, 40)}" → 0分`);
+    } else {
+      console.log(`  ✅ 选品评分: "${post.title.substring(0, 40)}" → ${Math.round(total)}分`);
+    }
     return db.prepare('SELECT * FROM demand_scores WHERE post_id = ?').get(postId);
   } catch (e) {
     console.error(`  ❌ AI评分失败: ${e.message}`);
@@ -150,30 +169,30 @@ export async function generateMiningHandbook(postId) {
   const existing = db.prepare('SELECT * FROM mining_handbooks WHERE post_id = ?').get(postId);
   if (existing) return existing;
 
-  const prompt = `你是一个产品顾问。基于下面的需求分析，生成一个产品挖掘手册。
+  const prompt = `你是跨境电商选品顾问，帮中国跨境卖家找到蓝海产品。基于下面的选品信号，生成一个产品挖掘手册。
 
-需求: ${post.title}
-需求概要: ${post.user_need_summary}
-评分: ${post.total_score}/100
-来源: ${post.subreddit} | Upvotes: ${post.upvotes} | 评论: ${post.comments_count}
+商品: ${post.title}
+选品信号: ${post.user_need_summary}
+蓝海评分: ${post.total_score}/100
+来源: ${post.subreddit} | 热度: ${post.upvotes} | 讨论: ${post.comments_count}
 竞品参考: ${post.competitor_list || '未识别'}
 
 请用中文生成，包含以下5个部分（用markdown格式）:
 
-## 一、需求背景
-（2-3句话说明需求从哪来，谁在痛）
+## 一、选品机会
+（3-4句话：这个商品为什么有市场空间，哪里的需求未被满足）
 
-## 二、目标用户画像
-（具体描述谁会付钱买这个产品）
+## 二、目标市场
+（目标国家/人群/使用场景，市场规模估算）
 
-## 三、竞品分析
-（现有解决方案，各自优缺点，我们的差异化切入点）
+## 三、供应链分析
+（1688/义乌拿货成本估算，物流方式，认证要求）
 
-## 四、MVP方案
-（最小可行功能集，技术架构建议，零成本启动路径，预计2周开发）
+## 四、竞品拆解
+（亚马逊现有竞品的优缺点，差评集中点，我们的差异化切入点）
 
-## 五、变现设计
-（定价策略建议，付费入口，首月获客方案）`;
+## 五、启动路线
+（首批备货量、包装建议、Listing关键词、定价策略、首月推广方案）`;
 
   try {
     const completion = await openai.chat.completions.create({
@@ -210,20 +229,21 @@ export async function generateDailyReport() {
     SELECT p.*, s.total_score, s.user_need_summary
     FROM demand_posts p
     JOIN demand_scores s ON s.post_id = p.id
+    WHERE s.total_score > 0
     ORDER BY s.total_score DESC
     LIMIT 10
   `).all();
 
-  if (top10.length === 0) return '# 今日需求日报\n\n暂无数据，请先执行数据采集。';
+  if (top10.length === 0) return '# 🛒 今日选品日报\n\n暂无有效选品信号，请先执行数据采集。';
 
-  const prompt = `你是产品分析师。下面是根据多维度评分排序的Top 10产品需求，请生成一份日报。
+  const prompt = `你是跨境电商选品分析师。下面是根据蓝海选品评分排序的Top 10商品机会，请生成一份选品日报。
 
-${top10.map((p, i) => `${i + 1}. [${p.total_score}分] ${p.title} — ${p.user_need_summary} (来源: ${p.subreddit})`).join('\n')}
+${top10.map((p, i) => `${i + 1}. [${p.total_score}分] ${p.title} — ${p.user_need_summary} (来源: ${p.source}/${p.subreddit})`).join('\n')}
 
 用中文生成一个简洁的日报，包含:
-1. 今日亮点（Top 3深度点评）
-2. 趋势观察（什么类型的需求在涌现）
-3. 推荐关注（最值得下手的一个）`;
+1. 今日亮点（Top 3深度选品点评：为什么值得做，利润空间预估）
+2. 品类趋势（什么品类的需求在冒头）
+3. 推荐下手（最值得备货的一个商品，给出现实理由）`;
 
   try {
     const completion = await openai.chat.completions.create({

@@ -35,6 +35,28 @@ function smartFetch(url, options = {}) {
  * ============ Reddit 数据源 ============
  * 使用公开 JSON API，无需OAuth
  */
+
+/** 垃圾信号过滤：判断Reddit帖子是否为真实选品信号 */
+const GARBAGE_TITLES = [
+  /^weekly.*(thread|discussion|chat)/i,
+  /^(sticky|mod|announcement).*post/i,
+  /^(daily|weekly|monthly).*(question|thread|post)/i,
+  /come shop with me/i,
+  /rate my store/i,
+  /how do i start/i,
+  /is (it|this) worth it\?$/i,
+  /should i (sell|buy|start)/i,
+];
+
+function isRedditGarbage(title, body) {
+  if (!title || title.trim().length < 8) return true;
+  const t = title.toLowerCase();
+  for (const p of GARBAGE_TITLES) {
+    if (p.test(t)) return true;
+  }
+  return false;
+}
+
 // 电商选品相关子版块 — 跨境电商卖家需求信号
 const REDDIT_SUBREDDITS = [
   'AmazonFBA',        // 亚马逊卖家讨论选品
@@ -302,6 +324,10 @@ export async function collectAllSources(options = {}) {
   let newCount = 0;
   for (const post of allPosts) {
     if (!post.title) continue;
+    if (isRedditGarbage(post.title, post.body || '')) {
+      console.log(`  🗑️ 垃圾帖过滤: "${post.title.substring(0, 50)}"`);
+      continue;
+    }
     const result = insertPost.run(
       post.source, post.source_url, post.subreddit,
       post.title.substring(0, 500), (post.body || '').substring(0, 5000),
