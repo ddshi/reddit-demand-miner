@@ -1,0 +1,410 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Reddit需求矿工 — 控制台</title>
+<style>
+*{margin:0;padding:0;box-sizing:border-box}
+body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;background:#0d1117;color:#c9d1d9;min-height:100vh}
+.sidebar{position:fixed;left:0;top:0;width:240px;height:100vh;background:#161b22;border-right:1px solid #21262d;padding:20px;display:flex;flex-direction:column}
+.sidebar h1{font-size:16px;color:#f0f6fc;margin-bottom:24px}
+.sidebar .nav a{display:block;padding:10px 12px;color:#8b949e;text-decoration:none;border-radius:6px;margin-bottom:4px;font-size:14px;transition:all 0.15s}
+.sidebar .nav a:hover,.sidebar .nav a.active{background:#21262d;color:#f0f6fc}
+.sidebar .nav .badge{float:right;background:#238636;color:#fff;font-size:10px;padding:1px 6px;border-radius:8px}
+.sidebar .user-box{margin-top:auto;padding:12px;background:#0d1117;border-radius:8px;font-size:12px;color:#8b949e}
+.sidebar .user-box .email{color:#c9d1d9;font-weight:600;display:block;margin-bottom:2px}
+.sidebar .user-box .plan{color:#3fb950;display:block;margin-bottom:8px}
+.sidebar .user-box .btn-sm{padding:4px 10px;background:#21262d;color:#58a6ff;border:1px solid #30363d;border-radius:4px;cursor:pointer;font-size:11px;margin-right:4px}
+.main{margin-left:240px;padding:24px 32px}
+.header{display:flex;justify-content:space-between;align-items:center;margin-bottom:24px}
+.header h2{color:#f0f6fc;font-size:22px}
+.header .stats{display:flex;gap:16px}
+.stat-card{background:#161b22;border:1px solid #30363d;border-radius:8px;padding:12px 16px;min-width:100px;text-align:center}
+.stat-card .num{font-size:20px;font-weight:700;color:#f0f6fc}
+.stat-card .label{font-size:11px;color:#8b949e;margin-top:2px}
+
+/* 需求列表 */
+.demand-card{background:#161b22;border:1px solid #30363d;border-radius:10px;padding:18px 20px;margin-bottom:12px;cursor:pointer;transition:all 0.15s}
+.demand-card:hover{border-color:#58a6ff}
+.demand-card .rank{display:inline-block;width:28px;height:28px;text-align:center;line-height:28px;border-radius:6px;font-weight:700;font-size:14px;margin-right:12px;background:#21262d;color:#8b949e}
+.demand-card .rank.gold{background:rgba(210,153,34,0.2);color:#d29922}
+.demand-card .rank.silver{background:rgba(139,148,158,0.2);color:#b0b8c0}
+.demand-card .rank.bronze{background:rgba(180,120,50,0.2);color:#b87832}
+.demand-card .title{color:#58a6ff;font-size:15px;font-weight:600;text-decoration:none}
+.demand-card .title:hover{text-decoration:underline}
+.demand-card .meta{margin-top:6px;font-size:12px;color:#8b949e;display:flex;gap:16px;flex-wrap:wrap}
+.demand-card .meta span{display:flex;align-items:center;gap:4px}
+.demand-card .score{float:right;font-size:22px;font-weight:700;color:#3fb950}
+.demand-card .summary{margin-top:8px;font-size:13px;color:#8b949e;line-height:1.5}
+
+/* 需求详情弹窗 */
+.modal{display:none;position:fixed;inset:0;background:rgba(1,4,9,0.85);z-index:100;align-items:center;justify-content:center;padding:20px}
+.modal.show{display:flex}
+.modal-content{background:#161b22;border:1px solid #30363d;border-radius:12px;width:100%;max-width:720px;max-height:85vh;overflow-y:auto;padding:28px}
+.modal-content h3{color:#f0f6fc;font-size:18px;margin-bottom:16px}
+.modal-content .close{float:right;background:none;border:none;color:#8b949e;font-size:24px;cursor:pointer}
+.modal-content .close:hover{color:#f0f6fc}
+
+.score-grid{display:grid;grid-template-columns:repeat(5,1fr);gap:12px;margin:16px 0}
+.score-item{background:#0d1117;border-radius:8px;padding:12px;text-align:center}
+.score-item .dim{font-size:11px;color:#8b949e;margin-bottom:4px}
+.score-item .val{font-size:20px;font-weight:700;color:#f0f6fc}
+.score-item .bar{margin-top:6px;height:4px;background:#21262d;border-radius:2px;overflow:hidden}
+.score-item .bar-fill{height:100%;border-radius:2px;border-radius:2px}
+.bar-g1{background:#3fb950}.bar-g2{background:#58a6ff}.bar-g3{background:#d29922}.bar-g4{background:#db6d28}.bar-g5{background:#f85149}
+
+.handbook{background:#0d1117;border:1px solid #30363d;border-radius:8px;padding:16px;margin-top:16px;font-size:13px;line-height:1.6}
+.handbook h4{color:#58a6ff;margin:12px 0 6px}
+.handbook p{margin:4px 0;color:#8b949e}
+
+.upgrade-banner{background:linear-gradient(135deg,#1c2a3a,#161b22);border:1px solid #d29922;border-radius:10px;padding:20px;text-align:center;margin-top:20px}
+.upgrade-banner h3{color:#d29922;margin-bottom:8px}
+.upgrade-banner p{color:#8b949e;margin-bottom:12px;font-size:13px}
+.btn-upgrade{padding:10px 24px;background:#d29922;color:#0d1117;border:none;border-radius:6px;font-weight:700;cursor:pointer;font-size:14px}
+.btn-upgrade:hover{background:#e2a62a}
+
+.btn{display:inline-block;padding:8px 16px;border-radius:6px;font-size:13px;font-weight:500;cursor:pointer;border:none;transition:all 0.15s}
+.btn-primary{background:#238636;color:#fff}
+.btn-primary:hover{background:#2ea043}
+.btn-secondary{background:#21262d;color:#c9d1d9;border:1px solid #30363d}
+.btn-secondary:hover{background:#30363d}
+.btn-warning{background:rgba(210,153,34,0.15);color:#d29922;border:1px solid rgba(210,153,34,0.3)}
+
+.toast{display:none;position:fixed;bottom:24px;right:24px;padding:12px 20px;border-radius:8px;font-size:13px;z-index:200;min-width:200px}
+.toast-success{background:#238636;color:#fff}
+.toast-error{background:#da3633;color:#fff}
+
+.loading{color:#8b949e;text-align:center;padding:40px}
+.empty{color:#8b949e;text-align:center;padding:60px;font-size:14px}
+.empty h3{color:#f0f6fc;margin-bottom:8px}
+.actions{display:flex;gap:8px;margin-bottom:20px}
+input[type="text"],input[type="email"]{padding:8px 12px;background:#0d1117;border:1px solid #30363d;border-radius:6px;color:#f0f6fc;font-size:13px;outline:none}
+input:focus{border-color:#58a6ff}
+.tabs{display:flex;gap:0;margin-bottom:20px;border-bottom:1px solid #21262d}
+.tab{padding:8px 16px;background:none;border:none;color:#8b949e;cursor:pointer;font-size:13px;border-bottom:2px solid transparent}
+.tab.active{color:#f0f6fc;border-bottom-color:#58a6ff}
+</style>
+</head>
+<body>
+<div class="sidebar">
+  <h1>📡 需求矿工</h1>
+  <div class="nav">
+    <a href="#" class="active" onclick="showTab('demands',this)">📊 需求排名</a>
+    <a href="#" onclick="showTab('report',this)">📰 日报解读 <span class="badge">Pro</span></a>
+  </div>
+  <div class="user-box">
+    <span class="email" id="userEmail">...</span>
+    <span class="plan" id="userPlan">Free</span>
+    <button class="btn-sm" onclick="openUpgradeModal()">升级Pro</button>
+    <button class="btn-sm" onclick="logout()" style="color:#f85149">退出</button>
+  </div>
+</div>
+
+<div class="main">
+  <div id="tab-demands" class="tab-content">
+    <div class="header">
+      <h2>🔥 今日Top需求</h2>
+      <div class="actions">
+        <input type="text" id="activateInput" placeholder="激活码..." style="width:140px;font-size:12px" onkeyup="if(event.key==='Enter')doActivate()">
+        <button class="btn btn-warning" onclick="doActivate()" style="font-size:12px">激活Pro</button>
+        <button class="btn btn-secondary" onclick="collectData()" id="collectBtn" style="font-size:12px">🔄 刷新数据</button>
+      </div>
+    </div>
+    <div id="demands-content"><div class="loading">加载中...</div></div>
+  </div>
+
+  <div id="tab-report" class="tab-content" style="display:none">
+    <div class="header">
+      <h2>📰 AI日报解读</h2>
+      <button class="btn btn-primary" onclick="generateReport()">✨ 生成日报</button>
+    </div>
+    <div id="report-content"><div class="loading">Pro会员专属，请升级后查看</div></div>
+  </div>
+</div>
+
+<!-- 需求详情弹窗 -->
+<div class="modal" id="detailModal">
+  <div class="modal-content" id="detailContent"></div>
+</div>
+
+<!-- 升级弹窗 -->
+<div class="modal" id="upgradeModal">
+  <div class="modal-content" style="max-width:480px">
+    <button class="close" onclick="closeUpgradeModal()">×</button>
+    <h3>🚀 升级 Pro 会员</h3>
+    <table style="width:100%;margin:16px 0;border-collapse:collapse;font-size:13px">
+      <tr style="border-bottom:1px solid #21262d">
+        <td style="padding:8px">💵 月付</td><td style="color:#3fb950;text-align:right;font-weight:700">¥29/月</td>
+      </tr>
+      <tr style="border-bottom:1px solid #21262d">
+        <td style="padding:8px">💎 年付</td><td style="color:#d29922;text-align:right;font-weight:700">¥199/年 (省¥149)</td>
+      </tr>
+      <tr style="border-bottom:1px solid #21262d">
+        <td style="padding:8px">🎁 Demo体验</td><td style="color:#58a6ff;text-align:right">7天免费</td>
+      </tr>
+    </table>
+    <p style="font-size:12px;color:#8b949e;margin-bottom:12px">💡 支付方式：微信 / 支付宝（开发中，请联系管理员获取激活码）</p>
+    <div style="display:flex;gap:8px;margin-bottom:12px">
+      <input type="text" id="upgradeCodeInput" placeholder="输入激活码..." style="flex:1">
+      <button class="btn btn-primary" onclick="doActivateFromUpgrade()">激活</button>
+    </div>
+    <button class="btn btn-secondary" style="width:100%" onclick="createPayment()">💳 生成支付订单（¥29）</button>
+  </div>
+</div>
+
+<div class="toast" id="toast"></div>
+
+<script>
+var API = '/api';
+var TOKEN = localStorage.getItem('rdm_token');
+var CURRENT_USER = JSON.parse(localStorage.getItem('rdm_user') || '{}');
+var CURRENT_DEMAND_ID = null;
+
+// ========== 初始化 ==========
+if (!TOKEN) { window.location.href = '/login'; }
+
+document.getElementById('userEmail').textContent = CURRENT_USER.email || '...';
+document.getElementById('userPlan').textContent = (CURRENT_USER.membership || 'free').toUpperCase();
+
+function showToast(msg, type) {
+  var t = document.getElementById('toast');
+  t.textContent = msg; t.className = 'toast toast-' + (type || 'success'); t.style.display = 'block';
+  setTimeout(function() { t.style.display = 'none'; }, 3500);
+}
+
+function api(url, opts) {
+  opts = opts || {};
+  opts.headers = Object.assign({}, opts.headers, { 'Authorization': 'Bearer ' + TOKEN });
+  return fetch(url, opts);
+}
+
+function showTab(name, el) {
+  document.querySelectorAll('.tab-content').forEach(function(d) { d.style.display = 'none'; });
+  document.querySelectorAll('.nav a').forEach(function(a) { a.classList.remove('active'); });
+  document.getElementById('tab-' + name).style.display = 'block';
+  if (el) el.classList.add('active');
+  if (name === 'demands') loadDemands();
+  if (name === 'report') loadReport();
+}
+
+// ========== 加载需求 ==========
+function loadDemands() {
+  var el = document.getElementById('demands-content');
+  el.innerHTML = '<div class="loading">🔍 加载需求排名...</div>';
+
+  api(API + '/demands').then(function(r) { return r.json(); }).then(function(data) {
+    if (data.error) { el.innerHTML = '<div class="empty"><h3>暂无数据</h3><p>点击"刷新数据"采集Reddit/HN/V2EX</p></div>'; return; }
+
+    document.getElementById('userPlan').textContent = data.membership.toUpperCase();
+    CURRENT_USER.membership = data.membership;
+    localStorage.setItem('rdm_user', JSON.stringify(CURRENT_USER));
+
+    if (!data.demands || !data.demands.length) {
+      el.innerHTML = '<div class="empty"><h3>📡 还没有需求数据</h3><p>点击右上角"刷新数据"开始采集</p><button class="btn btn-primary" style="margin-top:12px" onclick="collectData()">🔄 立即采集</button></div>';
+      return;
+    }
+
+    var ranks = ['gold','silver','bronze'];
+    var html = '';
+
+    if (data.upgrade_prompt) {
+      html += '<div class="upgrade-banner"><h3>🔓 你是Free会员，仅显示Top ' + data.showing + '</h3><p>升级Pro查看完整Top 10 + AI产品挖掘手册</p><button class="btn-upgrade" onclick="openUpgradeModal()">🚀 升级 Pro — ¥29/月</button></div>';
+    }
+
+    html += data.demands.map(function(d, i) {
+      var rk = ranks[i] || '';
+      var sourceIcon = d.source === 'reddit' ? '🔴' : d.source === 'hackernews' ? '🟠' : d.source === 'producthunt' ? '🟣' : d.source === 'github' ? '⚫' : '🇨🇳';
+      return '<div class="demand-card" onclick="openDetail(' + d.id + ')">' +
+        '<span class="score">' + (d.total_score ? d.total_score.toFixed(0) : '?') + '</span>' +
+        '<span class="rank ' + rk + '">' + (i + 1) + '</span>' +
+        '<a class="title" href="#" onclick="event.stopPropagation();openDetail(' + d.id + ')">' + escapeHtml(d.title) + '</a>' +
+        '<div class="meta">' +
+          '<span>' + sourceIcon + ' ' + escapeHtml(d.subreddit) + '</span>' +
+          '<span>⬆ ' + d.upvotes + '</span>' +
+          '<span>💬 ' + d.comments_count + '</span>' +
+          (d.pay_signals_count ? '<span style="color:#d29922">💰 付费信号</span>' : '') +
+        '</div>' +
+        (d.user_need_summary ? '<div class="summary">' + escapeHtml(d.user_need_summary) + '</div>' : '') +
+      '</div>';
+    }).join('');
+
+    el.innerHTML = html;
+  }).catch(function(e) {
+    el.innerHTML = '<div class="empty"><h3>加载失败</h3><p>' + e.message + '</p></div>';
+  });
+}
+
+// ========== 需求详情 ==========
+function openDetail(postId) {
+  CURRENT_DEMAND_ID = postId;
+  var modal = document.getElementById('detailModal');
+  var el = document.getElementById('detailContent');
+  el.innerHTML = '<div class="loading">加载中...</div>';
+  modal.classList.add('show');
+
+  api(API + '/demands/' + postId).then(function(r) { return r.json(); }).then(function(data) {
+    if (data.error) { el.innerHTML = '<p style="color:#f85149">' + data.error + '</p>'; return; }
+
+    var scores = [
+      { name: 'Reddit信号', val: data.reddit_signal || 0, weight: '30%', cls:'bar-g1' },
+      { name: '市场需求', val: data.market_demand || 0, weight: '25%', cls:'bar-g2' },
+      { name: '竞争缺口', val: data.competition_gap || 0, weight: '20%', cls:'bar-g3' },
+      { name: '变现能力', val: data.monetization || 0, weight: '15%', cls:'bar-g4' },
+      { name: '可行度', val: data.feasibility || 0, weight: '10%', cls:'bar-g5' }
+    ];
+
+    var scoreHtml = '<div class="score-grid">' + scores.map(function(s) {
+      return '<div class="score-item"><div class="dim">' + s.name + ' (' + s.weight + ')</div><div class="val">' + s.val + '</div><div class="bar"><div class="bar-fill ' + s.cls + '" style="width:' + s.val + '%"></div></div></div>';
+    }).join('') + '</div>';
+
+    var handbookHtml = '';
+    if (data.is_pro && data.handbook) {
+      handbookHtml = '<div class="handbook"><h3 style="color:#d29922">📘 产品挖掘手册 (Pro)</h3>' + markdownToHtml(data.handbook.content || '') + '</div>';
+    } else if (data.upgrade_prompt) {
+      handbookHtml = '<div class="upgrade-banner"><h3>🔒 产品挖掘手册为Pro专属</h3><p>升级Pro查看完整竞品分析 + MVP方案 + 变现设计</p><button class="btn-upgrade" onclick="openUpgradeModal()">🚀 升级 Pro — ¥29/月</button></div>';
+    }
+
+    el.innerHTML = '<button class="close" onclick="closeDetail()">&times;</button>' +
+      '<h3>' + escapeHtml(data.title) + '</h3>' +
+      '<div class="meta" style="margin-bottom:12px"><span>来源: ' + escapeHtml(data.subreddit) + '</span><span>⬆ ' + data.upvotes + '</span><span>💬 ' + data.comments_count + '</span><span style="color:#3fb950;font-weight:700">总分: ' + (data.total_score ? data.total_score.toFixed(0) : '?') + '/100</span></div>' +
+      (data.user_need_summary ? '<p style="color:#c9d1d9;margin-bottom:16px;background:#0d1117;padding:12px;border-radius:6px;border-left:3px solid #58a6ff">💡 ' + escapeHtml(data.user_need_summary) + '</p>' : '') +
+      '<h4 style="color:#f0f6fc;margin-bottom:8px">五维度评分</h4>' + scoreHtml +
+      (data.competitor_list && data.competitor_list !== '无' ? '<p style="margin-top:12px;font-size:13px;color:#8b949e">🏢 竞品参考: ' + escapeHtml(data.competitor_list) + '</p>' : '') +
+      (data.body ? '<div class="handbook" style="margin-top:12px"><h4>📝 原文摘要</h4><p>' + escapeHtml(data.body.substring(0, 800)) + '</p></div>' : '') +
+      handbookHtml;
+  });
+}
+
+function closeDetail() {
+  document.getElementById('detailModal').classList.remove('show');
+}
+
+// ========== 数据采集 ==========
+function collectData() {
+  var btn = document.getElementById('collectBtn');
+  btn.disabled = true; btn.textContent = '⏳ 采集中...';
+  showToast('📡 正在从 Reddit / HN / V2EX / GitHub 采集数据...', 'success');
+
+  api(API + '/collect', { method: 'POST' }).then(function(r) { return r.json(); }).then(function(data) {
+    showToast('✅ 采集完成: ' + data.total + '条, 新增 ' + data.new + '条', 'success');
+    btn.disabled = false; btn.textContent = '🔄 刷新数据';
+    // 自动触发评分
+    showToast('🧠 正在AI评分...', 'success');
+    return api(API + '/score', { method: 'POST' }).then(function(r) { return r.json(); });
+  }).then(function(scoreData) {
+    showToast('✅ AI评分完成: ' + (scoreData.scored || 0) + '条', 'success');
+    loadDemands();
+  }).catch(function(e) {
+    showToast('❌ ' + e.message, 'error');
+    btn.disabled = false; btn.textContent = '🔄 刷新数据';
+  });
+}
+
+// ========== 日报 ==========
+function loadReport() {
+  var el = document.getElementById('report-content');
+  if (CURRENT_USER.membership !== 'pro') {
+    el.innerHTML = '<div class="upgrade-banner" style="margin-top:0"><h3>📰 AI日报为Pro专属</h3><p>升级Pro查看AI生成的每日需求解读 + 趋势分析 + 推荐关注</p><button class="btn-upgrade" onclick="openUpgradeModal()">🚀 升级 Pro</button></div>';
+    return;
+  }
+
+  el.innerHTML = '<div class="loading">加载日报...</div>';
+  api(API + '/report').then(function(r) { return r.json(); }).then(function(data) {
+    if (data.error) { el.innerHTML = '<div class="empty"><h3>🔒 ' + data.error + '</h3></div>'; return; }
+    el.innerHTML = '<div style="background:#161b22;border:1px solid #30363d;border-radius:10px;padding:20px;font-size:14px;line-height:1.8;white-space:pre-wrap">' + escapeHtml(JSON.stringify(data, null, 2)) + '</div>';
+  });
+}
+
+function generateReport() {
+  if (CURRENT_USER.membership !== 'pro') return showToast('日报为Pro专属功能', 'error');
+  var el = document.getElementById('report-content');
+  el.innerHTML = '<div class="loading">🤖 AI生成日报中...</div>';
+
+  api(API + '/report/generate', { method: 'POST' }).then(function(r) { return r.json(); }).then(function(data) {
+    el.innerHTML = '<div style="background:#161b22;border:1px solid #30363d;border-radius:10px;padding:20px;font-size:14px;line-height:1.8;white-space:pre-wrap">' + markdownToHtml(data.report || '') + '</div>';
+    showToast('✅ 日报已生成', 'success');
+  }).catch(function(e) {
+    el.innerHTML = '<div class="empty"><p>生成失败: ' + e.message + '</p></div>';
+  });
+}
+
+// ========== 会员升级 ==========
+function openUpgradeModal() {
+  document.getElementById('upgradeModal').classList.add('show');
+}
+function closeUpgradeModal() {
+  document.getElementById('upgradeModal').classList.remove('show');
+}
+function doActivate() {
+  var code = document.getElementById('activateInput').value.trim();
+  if (!code) return showToast('请输入激活码', 'error');
+  activateCode(code);
+}
+function doActivateFromUpgrade() {
+  var code = document.getElementById('upgradeCodeInput').value.trim();
+  if (!code) return showToast('请输入激活码', 'error');
+  activateCode(code);
+}
+
+function activateCode(code) {
+  api(API + '/activate', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ code: code })
+  }).then(function(r) { return r.json(); }).then(function(data) {
+    if (data.success) {
+      CURRENT_USER.membership = data.plan;
+      localStorage.setItem('rdm_user', JSON.stringify(CURRENT_USER));
+      document.getElementById('userPlan').textContent = data.plan.toUpperCase();
+      closeUpgradeModal();
+      showToast('🎉 升级成功！已是 ' + data.plan.toUpperCase() + ' 会员', 'success');
+      setTimeout(function() { loadDemands(); loadReport(); }, 500);
+    } else {
+      showToast(data.error || '激活失败', 'error');
+    }
+  }).catch(function(e) {
+    showToast('网络错误', 'error');
+  });
+}
+
+function createPayment() {
+  api(API + '/payment/create', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ plan: 'pro', duration: 'monthly' })
+  }).then(function(r) { return r.json(); }).then(function(data) {
+    if (data.error) { showToast(data.error, 'error'); return; }
+    showToast('📋 订单已创建: ' + data.transaction_id, 'success');
+    alert('订单ID: ' + data.transaction_id + '\n金额: ¥' + data.amount + '\n\n' + data.instructions.note);
+  });
+}
+
+function logout() {
+  localStorage.removeItem('rdm_token');
+  localStorage.removeItem('rdm_user');
+  window.location.href = '/login';
+}
+
+// ========== 工具函数 ==========
+function escapeHtml(s) { return String(s || '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;'); }
+function markdownToHtml(md) {
+  return String(md || '')
+    .replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;')
+    .replace(/^### (.+)/gm, '<h4 style="color:#f0f6fc;margin:12px 0 6px">$1</h4>')
+    .replace(/^## (.+)/gm, '<h3 style="color:#58a6ff;margin:16px 0 8px">$1</h3>')
+    .replace(/^# (.+)/gm, '<h2 style="color:#f0f6fc;margin:20px 0 10px">$1</h2>')
+    .replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>')
+    .replace(/- (.+)/g, '<li style="margin-left:20px">$1</li>')
+    .replace(/\n\n/g, '<br><br>');
+}
+
+// ========== 启动 ==========
+loadDemands();
+
+// 点击弹窗外部关闭
+document.getElementById('detailModal').addEventListener('click', function(e) { if (e.target === this) closeDetail(); });
+document.getElementById('upgradeModal').addEventListener('click', function(e) { if (e.target === this) closeUpgradeModal(); });
+</script>
+</body>
+</html>

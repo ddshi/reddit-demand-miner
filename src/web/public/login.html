@@ -1,0 +1,133 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>登录 - Reddit需求矿工</title>
+<style>
+*{margin:0;padding:0;box-sizing:border-box}
+body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;background:linear-gradient(135deg,#0d1117 0%,#161b22 100%);color:#c9d1d9;min-height:100vh;display:flex;align-items:center;justify-content:center}
+.container{width:100%;max-width:420px;padding:24px}
+.logo{text-align:center;margin-bottom:32px}
+.logo h1{font-size:28px;color:#f0f6fc;margin-bottom:4px}
+.logo p{color:#8b949e;font-size:14px}
+.card{background:#161b22;border:1px solid #30363d;border-radius:12px;padding:32px}
+.card h2{color:#f0f6fc;font-size:20px;margin-bottom:24px;text-align:center}
+.form-group{margin-bottom:16px}
+.form-group label{display:block;color:#c9d1d9;margin-bottom:6px;font-size:13px;font-weight:500}
+.form-group input{width:100%;padding:10px 12px;background:#0d1117;border:1px solid #30363d;border-radius:6px;color:#f0f6fc;font-size:14px;outline:none;transition:border-color 0.2s}
+.form-group input:focus{border-color:#58a6ff}
+.btn{width:100%;padding:10px;border:none;border-radius:6px;font-size:14px;font-weight:600;cursor:pointer;transition:all 0.2s;margin-bottom:8px}
+.btn-primary{background:#238636;color:#fff}
+.btn-primary:hover{background:#2ea043}
+.btn-secondary{background:#21262d;color:#c9d1d9;border:1px solid #30363d}
+.btn-secondary:hover{background:#30363d}
+.toast{display:none;padding:12px;border-radius:6px;margin-bottom:16px;font-size:13px;text-align:center}
+.toast-error{background:rgba(248,81,73,0.15);color:#f85149;border:1px solid rgba(248,81,73,0.3)}
+.toast-success{background:rgba(63,185,80,0.15);color:#3fb950;border:1px solid rgba(63,185,80,0.3)}
+.code-box{margin-top:16px;padding:12px;background:#0d1117;border:1px dashed #30363d;border-radius:6px}
+.code-box label{display:block;font-size:12px;color:#8b949e;margin-bottom:8px}
+.code-box input{width:100%;padding:8px;background:#161b22;border:1px solid #30363d;border-radius:4px;color:#f0f6fc;font-size:13px;text-transform:uppercase}
+.code-box button{width:100%;margin-top:8px;padding:6px;background:#21262d;color:#58a6ff;border:1px solid #30363d;border-radius:4px;cursor:pointer;font-size:12px}
+.divider{color:#8b949e;text-align:center;margin:16px 0;font-size:13px}
+.links{text-align:center;margin-top:16px;font-size:13px;color:#8b949e}
+.links a{color:#58a6ff;text-decoration:none}
+.links a:hover{text-decoration:underline}
+</style>
+</head>
+<body>
+<div class="container">
+  <div class="logo">
+    <h1>📡 Reddit需求矿工</h1>
+    <p>数据驱动 · 挖掘真实付费需求</p>
+  </div>
+  <div class="card">
+    <h2>登录</h2>
+    <div class="toast" id="toast"></div>
+    <form onsubmit="login(event)">
+      <div class="form-group">
+        <label>邮箱</label>
+        <input type="email" id="email" placeholder="you@example.com" required>
+      </div>
+      <div class="form-group">
+        <label>密码</label>
+        <input type="password" id="password" placeholder="••••••" required>
+      </div>
+      <button type="submit" class="btn btn-primary">登录</button>
+    </form>
+    <!-- 激活码区域 -->
+    <div class="code-box">
+      <label>🔑 有激活码？输入升级Pro</label>
+      <input type="text" id="activateCode" placeholder="例如: RDM-PRO-30">
+      <button onclick="activateCode()">激活</button>
+    </div>
+    <div class="divider">还没有账号？</div>
+    <a href="/register" style="text-decoration:none"><button class="btn btn-secondary">注册 Free 会员</button></a>
+  </div>
+</div>
+
+<script>
+var API = '/api';
+function showToast(msg, type) {
+  var t = document.getElementById('toast');
+  t.textContent = msg; t.className = 'toast toast-' + (type || 'error'); t.style.display = 'block';
+  setTimeout(function() { t.style.display = 'none'; }, 4000);
+}
+
+async function login(e) {
+  e.preventDefault();
+  var email = document.getElementById('email').value.trim();
+  var password = document.getElementById('password').value;
+
+  try {
+    var res = await fetch(API + '/login', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ email: email, password: password })
+    });
+    var data = await res.json();
+    if (res.ok) {
+      localStorage.setItem('rdm_token', data.token);
+      localStorage.setItem('rdm_user', JSON.stringify(data.user));
+      showToast('登录成功！', 'success');
+      setTimeout(function() { window.location.href = '/dashboard'; }, 800);
+    } else {
+      showToast(data.error, 'error');
+    }
+  } catch(e) {
+    showToast('网络错误：' + e.message, 'error');
+  }
+}
+
+async function activateCode() {
+  var code = document.getElementById('activateCode').value.trim();
+  if (!code) return showToast('请输入激活码', 'error');
+
+  var token = localStorage.getItem('rdm_token');
+  if (!token) return showToast('请先登录', 'error');
+
+  try {
+    var res = await fetch(API + '/activate', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + token },
+      body: JSON.stringify({ code: code })
+    });
+    var data = await res.json();
+    if (data.success) {
+      showToast('激活成功！已升级为 ' + data.plan.toUpperCase() + ' 会员', 'success');
+      setTimeout(function() { window.location.href = '/dashboard'; }, 1000);
+    } else {
+      showToast(data.error, 'error');
+    }
+  } catch(e) {
+    showToast('网络错误', 'error');
+  }
+}
+
+// 如果已登录直接跳转
+if (localStorage.getItem('rdm_token')) {
+  window.location.href = '/dashboard';
+}
+</script>
+</body>
+</html>

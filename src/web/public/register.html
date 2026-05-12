@@ -1,0 +1,117 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>注册 - Reddit需求矿工</title>
+<style>
+*{margin:0;padding:0;box-sizing:border-box}
+body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;background:linear-gradient(135deg,#0d1117 0%,#161b22 100%);color:#c9d1d9;min-height:100vh;display:flex;align-items:center;justify-content:center}
+.container{width:100%;max-width:420px;padding:24px}
+.logo{text-align:center;margin-bottom:32px}
+.logo h1{font-size:28px;color:#f0f6fc;margin-bottom:4px}
+.logo p{color:#8b949e;font-size:14px}
+.card{background:#161b22;border:1px solid #30363d;border-radius:12px;padding:32px}
+.card h2{color:#f0f6fc;font-size:20px;margin-bottom:24px;text-align:center}
+.form-group{margin-bottom:16px}
+.form-group label{display:block;color:#c9d1d9;margin-bottom:6px;font-size:13px;font-weight:500}
+.form-group input{width:100%;padding:10px 12px;background:#0d1117;border:1px solid #30363d;border-radius:6px;color:#f0f6fc;font-size:14px;outline:none;transition:border-color 0.2s}
+.form-group input:focus{border-color:#58a6ff}
+.form-group input::placeholder{color:#484f58}
+.btn{width:100%;padding:10px;border:none;border-radius:6px;font-size:14px;font-weight:600;cursor:pointer;transition:all 0.2s;margin-bottom:12px}
+.btn-primary{background:#238636;color:#fff}
+.btn-primary:hover{background:#2ea043}
+.btn-secondary{background:#21262d;color:#c9d1d9;border:1px solid #30363d}
+.btn-secondary:hover{background:#30363d}
+.toast{display:none;padding:12px;border-radius:6px;margin-bottom:16px;font-size:13px;text-align:center}
+.toast-error{background:rgba(248,81,73,0.15);color:#f85149;border:1px solid rgba(248,81,73,0.3)}
+.toast-success{background:rgba(63,185,80,0.15);color:#3fb950;border:1px solid rgba(63,185,80,0.3)}
+.divider{color:#8b949e;text-align:center;margin:16px 0;font-size:13px}
+.links{text-align:center;margin-top:16px;font-size:13px;color:#8b949e}
+.links a{color:#58a6ff;text-decoration:none}
+.links a:hover{text-decoration:underline}
+.benefits{background:#0d1117;border:1px solid #21262d;border-radius:6px;padding:12px;margin:16px 0;font-size:12px;color:#8b949e}
+.benefits ul{list-style:none}
+.benefits li{margin:6px 0}
+.benefits li::before{content:'✓ ';color:#3fb950}
+</style>
+</head>
+<body>
+<div class="container">
+  <div class="logo">
+    <h1>📡 Reddit需求矿工</h1>
+    <p>数据驱动 · 挖掘真实付费需求</p>
+  </div>
+  <div class="card">
+    <h2>创建账号</h2>
+    <div class="toast" id="toast"></div>
+    <form onsubmit="register(event)">
+      <div class="form-group">
+        <label>邮箱</label>
+        <input type="email" id="email" placeholder="you@example.com" required>
+      </div>
+      <div class="form-group">
+        <label>密码（至少6位）</label>
+        <input type="password" id="password" placeholder="••••••" required minlength="6">
+      </div>
+      <div class="form-group">
+        <label>确认密码</label>
+        <input type="password" id="confirm" placeholder="再次输入密码" required>
+      </div>
+      <button type="submit" class="btn btn-primary" id="submitBtn">注册 Free 会员</button>
+    </form>
+    <div class="benefits">
+      <p style="color:#3fb950;margin-bottom:8px">🎁 Free会员包含：</p>
+      <ul>
+        <li>每日Top 3需求排名</li>
+        <li>基础需求卡片 + Reddit原始链接</li>
+        <li>V2EX中文创意</li>
+      </ul>
+    </div>
+    <div class="divider">已有账号？</div>
+    <a href="/login" style="text-decoration:none"><button type="button" class="btn btn-secondary">登录</button></a>
+  </div>
+</div>
+
+<script>
+var API = '/api';
+function showToast(msg, type) {
+  var t = document.getElementById('toast');
+  t.textContent = msg; t.className = 'toast toast-' + (type || 'error'); t.style.display = 'block';
+  setTimeout(function() { t.style.display = 'none'; }, 4000);
+}
+
+async function register(e) {
+  e.preventDefault();
+  var email = document.getElementById('email').value.trim();
+  var password = document.getElementById('password').value;
+  var confirm = document.getElementById('confirm').value;
+  if (password !== confirm) return showToast('两次密码不一致', 'error');
+  if (password.length < 6) return showToast('密码至少6位', 'error');
+
+  var btn = document.getElementById('submitBtn');
+  btn.disabled = true; btn.textContent = '注册中...';
+
+  try {
+    var res = await fetch(API + '/register', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ email: email, password: password })
+    });
+    var data = await res.json();
+    if (res.ok) {
+      localStorage.setItem('rdm_token', data.token);
+      localStorage.setItem('rdm_user', JSON.stringify(data.user));
+      showToast(data.message || '注册成功！', 'success');
+      setTimeout(function() { window.location.href = '/dashboard'; }, 1500);
+    } else {
+      showToast(data.error, 'error');
+    }
+  } catch(e) {
+    showToast('网络错误：' + e.message, 'error');
+  }
+  btn.disabled = false; btn.textContent = '注册 Free 会员';
+}
+</script>
+</body>
+</html>
