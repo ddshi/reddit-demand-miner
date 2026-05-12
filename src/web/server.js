@@ -24,8 +24,11 @@ const app = express();
 app.use(express.json({ limit: '10mb' }));
 app.use(express.static(path.join(__dirname, 'public')));
 
-// 首页重定向
-app.get('/', (req, res) => res.redirect('/dashboard.html'));
+// 页面路由映射（友好URL）
+app.get('/', (req, res) => res.redirect('/dashboard'));
+app.get('/login', (req, res) => res.sendFile(path.join(__dirname, 'public', 'login.html')));
+app.get('/register', (req, res) => res.sendFile(path.join(__dirname, 'public', 'register.html')));
+app.get('/dashboard', (req, res) => res.sendFile(path.join(__dirname, 'public', 'dashboard.html')));
 
 // ============ 认证中间件 ============
 const PUBLIC_ROUTES = ['/health', '/plans', '/login', '/register', '/activate'];
