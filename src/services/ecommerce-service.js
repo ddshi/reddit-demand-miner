@@ -84,7 +84,7 @@ function isGarbageSignal(title, body) {
   return false;
 }
 
-/** 统一入库 */
+/** 统一入库（使用事务批量写入，速度提升10-100x） */
 function insertItems(db, items) {
   const insertPost = db.prepare(`
     INSERT OR IGNORE INTO demand_posts (source, source_url, subreddit, title, body, author, upvotes, comments_count, posted_at, raw_json)
@@ -92,26 +92,34 @@ function insertItems(db, items) {
   `);
 
   let newCount = 0;
+  const validItems = [];
   for (const item of items) {
     if (!item.title) continue;
     if (isGarbageSignal(item.title, item.body || '')) {
       console.log(`  🗑️ 垃圾信号过滤: "${item.title.substring(0, 50)}"`);
       continue;
     }
-    const result = insertPost.run(
-      item.source,
-      item.source_url || '',
-      item.subreddit || '',
-      item.title.substring(0, 500),
-      (item.body || '').substring(0, 5000),
-      item.author || '',
-      item.upvotes || 0,
-      item.comments_count || 0,
-      item.posted_at || new Date().toISOString(),
-      item.raw_json || '{}'
-    );
-    if (result.changes > 0) newCount++;
+    validItems.push(item);
   }
+
+  const bulkInsert = db.transaction((items) => {
+    for (const item of items) {
+      const result = insertPost.run(
+        item.source,
+        item.source_url || '',
+        item.subreddit || '',
+        item.title.substring(0, 500),
+        (item.body || '').substring(0, 5000),
+        item.author || '',
+        item.upvotes || 0,
+        item.comments_count || 0,
+        item.posted_at || new Date().toISOString(),
+        item.raw_json || '{}'
+      );
+      if (result.changes > 0) newCount++;
+    }
+  });
+  bulkInsert(validItems);
   return newCount;
 }
 

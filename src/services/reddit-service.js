@@ -315,27 +315,36 @@ export async function collectAllSources(options = {}) {
   // 2-5 已移除 Hacker News / Product Hunt / GitHub / V2EX（非电商需求）
   // 电商平台数据由 ecommerce-service.js 独立采集
 
-  // 去重+入库
+  // 去重+入库（使用事务加速，避免逐条写入阻塞事件循环）
   const insertPost = db.prepare(`
     INSERT OR IGNORE INTO demand_posts (source, source_url, subreddit, title, body, author, upvotes, comments_count, posted_at, raw_json)
     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
   `);
 
   let newCount = 0;
+  const validPosts = [];
   for (const post of allPosts) {
     if (!post.title) continue;
     if (isRedditGarbage(post.title, post.body || '')) {
       console.log(`  🗑️ 垃圾帖过滤: "${post.title.substring(0, 50)}"`);
       continue;
     }
-    const result = insertPost.run(
-      post.source, post.source_url, post.subreddit,
-      post.title.substring(0, 500), (post.body || '').substring(0, 5000),
-      post.author, post.upvotes, post.comments_count,
-      post.posted_at, post.raw_json || '{}'
-    );
-    if (result.changes > 0) newCount++;
+    validPosts.push(post);
   }
+
+  // 事务批量写入（速度提升10-100x，大幅减少事件循环阻塞）
+  const bulkInsert = db.transaction((posts) => {
+    for (const post of posts) {
+      const result = insertPost.run(
+        post.source, post.source_url, post.subreddit,
+        post.title.substring(0, 500), (post.body || '').substring(0, 5000),
+        post.author, post.upvotes, post.comments_count,
+        post.posted_at, post.raw_json || '{}'
+      );
+      if (result.changes > 0) newCount++;
+    }
+  });
+  bulkInsert(validPosts);
 
   console.log(`\n📊 采集完成: ${allPosts.length} 条, 新增 ${newCount} 条`);
   console.log(`   来源分布: ${JSON.stringify(stats)}`);

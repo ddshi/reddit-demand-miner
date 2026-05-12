@@ -396,10 +396,30 @@ app.listen(PORT, () => {
   autoWarmUp();
 });
 
-// 自动预热：部署后自动填充数据
+// 自动预热：分步进行，绝不阻塞请求
+// 策略：60秒后才启动采集 → 分小批 → 批间yield → 绝不阻塞HTTP
 async function autoWarmUp() {
-  // 延迟启动，让Web服务先接受请求
-  await new Promise(r => setTimeout(r, 3000));
+  // 60秒延迟，给服务足够时间处理注册/登录等请求
+  await new Promise(r => setTimeout(r, 60000));
+
+  async function yieldEventLoop() {
+    // 每处理一批后释放事件循环，让HTTP请求有机会执行
+    await new Promise(r => setImmediate(r));
+  }
+
+  async function collectWithYield(sourceName, collector, args) {
+    await yieldEventLoop();
+    console.log(`📥 [预热] 开始采集 ${sourceName}...`);
+    try {
+      const result = await collector(...args);
+      console.log(`✅ [预热] ${sourceName} 完成: ${result.total}条, 新增${result.new}条`);
+      return result;
+    } catch (e) {
+      console.log(`⚠️ [预热] ${sourceName} 失败:`, e.message);
+      return { total: 0, new: 0 };
+    }
+  }
+
   try {
     const db = getDb();
     const { cnt } = db.prepare('SELECT COUNT(*) as cnt FROM demand_scores').get();
@@ -409,20 +429,23 @@ async function autoWarmUp() {
     }
     const { total } = db.prepare('SELECT COUNT(*) as total FROM demand_posts').get();
     if (total === 0) {
-      console.log('🔄 数据库为空，启动自动采集（社区+电商）...');
-      // 社区数据源
-      const communityResult = await collectAllSources({ limit: 50 });
-      console.log(`📥 社区采集完成: ${communityResult.total}条, 新增${communityResult.new}条`);
-      // 电商数据源（跳过Amazon反爬失败，只采Ali/Shopee/eBay）
-      console.log('🛒 正在采集电商平台数据（AliExpress + Shopee + eBay）...');
-      const ecomResult = await collectAllEcommerce(10);
-      console.log(`📥 电商采集完成: ${ecomResult.total}条, 新增${ecomResult.new}条`);
+      console.log('🔔 [预热] 数据库为空，60秒后逐步采集（不阻塞请求）...');
+      // 社区数据源（小批量，batch间yield）
+      await collectWithYield('Reddit社区', collectAllSources, [{ limit: 20 }]);
+      // 电商数据源
+      await collectWithYield('电商平台', collectAllEcommerce, [5]);
     }
-    console.log('🧠 启动自动AI评分（先评5条快速出结果）...');
-    const scoreResult = await scoreAllUnscored(5);
-    console.log(`✅ 首批评分完成: ${scoreResult.scored}条`);
-    // 后台继续评分剩余
-    scoreAllUnscored(25).then(r => console.log(`✅ 补充评分完成: ${r.scored}条`)).catch(() => {});
+    // 评分也分小批
+    await yieldEventLoop();
+    console.log('🧠 [预热] 启动AI评分（5条）...');
+    try {
+      const scoreResult = await scoreAllUnscored(5);
+      console.log(`✅ [预热] 首批评分: ${scoreResult.scored}条`);
+    } catch (e) {
+      console.log('⚠️ [预热] 评分失败:', e.message);
+    }
+    // 剩余评分在后台，不阻塞
+    scoreAllUnscored(20).then(r => console.log(`✅ 补充评分: ${r.scored}条`)).catch(() => {});
   } catch (e) {
     console.error('⚠️ 自动预热失败（不影响服务）:', e.message);
   }

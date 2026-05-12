@@ -1,0 +1,1 @@
+{"query":"mutation { serviceRedeploy(id: \"0c357c49-d739-4960-9754-8debf38d2aab\") { id } }"}
