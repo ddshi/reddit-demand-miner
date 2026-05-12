@@ -15,6 +15,7 @@ import { initDb, getDb, createSession, authenticateToken, checkMembership } from
 import { getUserPlan, activateWithCode, createPaymentOrder, confirmPayment,
   getTopDemands, getDemandDetail, getDailyReport, getAdminStats, PLANS } from '../services/billing.js';
 import { collectAllSources, collectPaySignals } from '../services/reddit-service.js';
+import { collectAmazon, collectAliExpress, collectShopee, collectEbay, collectAllEcommerce } from '../services/ecommerce-service.js';
 import { scoreDemand, scoreAllUnscored, generateDailyReport } from '../services/ai-scorer.js';
 import crypto from 'crypto';
 
@@ -169,8 +170,39 @@ app.get('/api/report', (req, res) => {
 // ============ 数据采集（需Pro或管理员） ============
 app.post('/api/collect', (req, res) => {
   const user = checkMembership(req.user_id);
-  // Free会员也能触发，但限制
-  collectAllSources({ limit: 100 }).then(result => {
+  const source = (req.body?.source || req.query?.source || '').toLowerCase();
+
+  let promise;
+  switch (source) {
+    case 'amazon':
+      promise = collectAmazon(50);
+      break;
+    case 'aliexpress':
+      promise = collectAliExpress(30);
+      break;
+    case 'shopee':
+      promise = collectShopee(35);
+      break;
+    case 'ebay':
+      promise = collectEbay(25);
+      break;
+    case 'ecommerce':
+      promise = collectAllEcommerce(20);
+      break;
+    default:
+      // 全部采集: 社区+电商
+      promise = Promise.all([
+        collectAllSources({ limit: 100 }),
+        collectAllEcommerce(15)
+      ]).then(([community, ecommerce]) => ({
+        community,
+        ecommerce,
+        total: (community?.total || 0) + (ecommerce?.total || 0),
+        new: (community?.new || 0) + (ecommerce?.new || 0)
+      }));
+  }
+
+  promise.then(result => {
     res.json(result);
   }).catch(e => {
     res.status(500).json({ error: e.message });
@@ -240,9 +272,14 @@ async function autoWarmUp() {
     }
     const { total } = db.prepare('SELECT COUNT(*) as total FROM demand_posts').get();
     if (total === 0) {
-      console.log('🔄 数据库为空，启动自动采集...');
-      const result = await collectAllSources({ limit: 50 });
-      console.log(`📥 采集完成: ${result.total}条, 新增${result.new}条`);
+      console.log('🔄 数据库为空，启动自动采集（社区+电商）...');
+      // 社区数据源
+      const communityResult = await collectAllSources({ limit: 50 });
+      console.log(`📥 社区采集完成: ${communityResult.total}条, 新增${communityResult.new}条`);
+      // 电商数据源
+      console.log('🛒 正在采集电商平台数据...');
+      const ecomResult = await collectAllEcommerce(15);
+      console.log(`📥 电商采集完成: ${ecomResult.total}条, 新增${ecomResult.new}条`);
     }
     console.log('🧠 启动自动AI评分...');
     const scoreResult = await scoreAllUnscored(30);

@@ -1,6 +1,6 @@
 /**
- * Reddit需求矿工 — 多源数据采集引擎
- * 数据源: Reddit JSON API (免费), Hacker News Algolia API, Product Hunt, GitHub Trending, V2EX
+ * Reddit需求矿工 — Reddit社区采集引擎
+ * 数据源: Reddit JSON API (免费) — 电商选品相关子版块
  * 
  * 代理配置:
  *   设置环境变量 HTTP_PROXY=http://127.0.0.1:7890 即可通过代理访问Reddit
@@ -35,15 +35,16 @@ function smartFetch(url, options = {}) {
  * ============ Reddit 数据源 ============
  * 使用公开 JSON API，无需OAuth
  */
+// 电商选品相关子版块 — 跨境电商卖家需求信号
 const REDDIT_SUBREDDITS = [
-  'SomebodyMakeThis',
-  'AppIdeas',
-  'SaaS',
-  'Entrepreneur',
-  'SideProject',
-  'Startup_Ideas',
-  'smallbusiness',
-  'nocode',
+  'AmazonFBA',        // 亚马逊卖家讨论选品
+  'ecommerce',        // 电商趋势
+  'dropship',         // 代发货选品
+  'BuyItForLife',     // 耐用品需求（反向工程）
+  'shopify',          // 独立站卖家
+  'smallbusiness',    // 小生意选品
+  'Flipping',         // 二手转卖趋势
+  'Entrepreneur',     // 创业选品思路
 ];
 
 /**
@@ -289,25 +290,8 @@ export async function collectAllSources(options = {}) {
     stats[`reddit_r_${sub}`] = posts.length;
   }
 
-  // 2. Hacker News
-  const hnPosts = await fetchHackerNews();
-  allPosts.push(...hnPosts.map(p => ({ ...p, raw_json: '{}' })));
-  stats['hackernews'] = hnPosts.length;
-
-  // 3. Product Hunt
-  const phPosts = await fetchProductHunt();
-  allPosts.push(...phPosts.map(p => ({ ...p, raw_json: '{}' })));
-  stats['producthunt'] = phPosts.length;
-
-  // 4. GitHub Trending
-  const ghPosts = await fetchGitHubTrending();
-  allPosts.push(...ghPosts.map(p => ({ ...p, raw_json: '{}' })));
-  stats['github'] = ghPosts.length;
-
-  // 5. V2EX
-  const v2Posts = await fetchV2ex();
-  allPosts.push(...v2Posts.map(p => ({ ...p, raw_json: '{}' })));
-  stats['v2ex'] = v2Posts.length;
+  // 2-5 已移除 Hacker News / Product Hunt / GitHub / V2EX（非电商需求）
+  // 电商平台数据由 ecommerce-service.js 独立采集
 
   // 去重+入库
   const insertPost = db.prepare(`

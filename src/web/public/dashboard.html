@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Reddit需求矿工 — 控制台</title>
+<title>蓝海选品雷达 — 跨境电商需求挖掘</title>
 <style>
 *{margin:0;padding:0;box-sizing:border-box}
 body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;background:#0d1117;color:#c9d1d9;min-height:100vh}
@@ -88,7 +88,7 @@ input:focus{border-color:#58a6ff}
 </head>
 <body>
 <div class="sidebar">
-  <h1>📡 需求矿工</h1>
+  <h1>🛒 蓝海选品</h1>
   <div class="nav">
     <a href="#" class="active" onclick="showTab('demands',this)">📊 需求排名</a>
     <a href="#" onclick="showTab('report',this)">📰 日报解读 <span class="badge">Pro</span></a>
@@ -104,11 +104,11 @@ input:focus{border-color:#58a6ff}
 <div class="main">
   <div id="tab-demands" class="tab-content">
     <div class="header">
-      <h2>🔥 今日Top需求</h2>
+      <h2>🔍 跨境电商选品雷达</h2>
       <div class="actions">
         <input type="text" id="activateInput" placeholder="激活码..." style="width:140px;font-size:12px" onkeyup="if(event.key==='Enter')doActivate()">
         <button class="btn btn-warning" onclick="doActivate()" style="font-size:12px">激活Pro</button>
-        <button class="btn btn-secondary" onclick="collectData()" id="collectBtn" style="font-size:12px">🔄 刷新数据</button>
+        <button class="btn btn-secondary" onclick="collectData()" id="collectBtn" style="font-size:12px">🔄 刷新数据 (Reddit/HN/Amazon/Shopee/eBay)</button>
       </div>
     </div>
     <div id="demands-content"><div class="loading">加载中...</div></div>
@@ -198,14 +198,14 @@ function loadDemands() {
 
   api(API + '/demands').then(function(r) { return r.json(); }).then(function(data) {
     if (data.code === 'AUTH_REQUIRED') { localStorage.removeItem('rdm_token'); window.location.href = '/login'; return; }
-    if (data.error) { el.innerHTML = '<div class="empty"><h3>暂无数据</h3><p>点击"刷新数据"采集Reddit/HN/V2EX</p></div>'; return; }
+    if (data.error) { el.innerHTML = '<div class="empty"><h3>暂无数据</h3><p>点击"刷新数据"采集 Reddit / HN / Amazon / Shopee / eBay 等平台</p></div>'; return; }
 
     document.getElementById('userPlan').textContent = data.membership.toUpperCase();
     CURRENT_USER.membership = data.membership;
     localStorage.setItem('rdm_user', JSON.stringify(CURRENT_USER));
 
     if (!data.demands || !data.demands.length) {
-      el.innerHTML = '<div class="empty"><h3>📡 还没有需求数据</h3><p>点击右上角"刷新数据"开始采集</p><button class="btn btn-primary" style="margin-top:12px" onclick="collectData()">🔄 立即采集</button></div>';
+      el.innerHTML = '<div class="empty"><h3>📡 还没有需求数据</h3><p>点击右上角"刷新数据"开始采集 Reddit / HN / Amazon / Shopee / eBay</p><button class="btn btn-primary" style="margin-top:12px" onclick="collectData()">🔄 立即采集</button></div>';
       return;
     }
 
@@ -218,7 +218,7 @@ function loadDemands() {
 
     html += data.demands.map(function(d, i) {
       var rk = ranks[i] || '';
-      var sourceIcon = d.source === 'reddit' ? '🔴' : d.source === 'hackernews' ? '🟠' : d.source === 'producthunt' ? '🟣' : d.source === 'github' ? '⚫' : '🇨🇳';
+      var sourceIcon = d.source === 'reddit' ? '🔴' : d.source === 'amazon' ? '📦' : d.source === 'aliexpress' ? '🅰️' : d.source === 'shopee' ? '🛒' : d.source === 'ebay' ? '🟢' : '🌐';
       return '<div class="demand-card" onclick="openDetail(' + d.id + ')">' +
         '<span class="score">' + (d.total_score ? d.total_score.toFixed(0) : '?') + '</span>' +
         '<span class="rank ' + rk + '">' + (i + 1) + '</span>' +
@@ -288,11 +288,11 @@ function closeDetail() {
 function collectData() {
   var btn = document.getElementById('collectBtn');
   btn.disabled = true; btn.textContent = '⏳ 采集中...';
-  showToast('📡 正在从 Reddit / HN / V2EX / GitHub 采集数据...', 'success');
+  showToast('📡 正在从 Reddit / HN / Amazon / Shopee / eBay / GitHub 采集数据...', 'success');
 
   api(API + '/collect', { method: 'POST' }).then(function(r) { return r.json(); }).then(function(data) {
     showToast('✅ 采集完成: ' + data.total + '条, 新增 ' + data.new + '条', 'success');
-    btn.disabled = false; btn.textContent = '🔄 刷新数据';
+    btn.disabled = false; btn.textContent = '🔄 刷新数据 (Reddit/HN/Amazon/Shopee/eBay)';
     // 自动触发评分
     showToast('🧠 正在AI评分...', 'success');
     return api(API + '/score', { method: 'POST' }).then(function(r) { return r.json(); });
@@ -301,7 +301,7 @@ function collectData() {
     loadDemands();
   }).catch(function(e) {
     showToast('❌ ' + e.message, 'error');
-    btn.disabled = false; btn.textContent = '🔄 刷新数据';
+    btn.disabled = false; btn.textContent = '🔄 刷新数据 (Reddit/HN/Amazon/Shopee/eBay)';
   });
 }
 
