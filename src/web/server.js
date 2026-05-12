@@ -94,7 +94,7 @@ app.post('/api/register', (req, res) => {
   const token = createSession(result.lastInsertRowid);
   res.status(201).json({
     token,
-    user: { id: result.lastInsertRowid, email, membership: 'free' },
+    user: { id: result.lastInsertRowid, email, membership: 'free', is_admin: false },
     message: '注册成功！你是Free会员，可查看Top 3需求'
   });
 });
@@ -117,6 +117,7 @@ app.post('/api/login', (req, res) => {
       id: user.id,
       email: user.email,
       membership: user.membership,
+      is_admin: !!user.is_admin,
       expires_at: user.membership_expires_at,
     }
   });

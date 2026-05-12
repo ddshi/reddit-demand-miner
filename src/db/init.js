@@ -173,12 +173,19 @@ export function initDb() {
     }
   }
 
-  // 初始化超级管理员账号（首次创建）
+  // 初始化超级管理员账号（首次创建或从备份恢复后修正）
   const adminHash = crypto.createHash('sha256').update('123456').digest('hex');
-  db.prepare(`
-    INSERT OR IGNORE INTO users (email, password_hash, membership, is_admin)
-    VALUES ('1604613739@qq.com', ?, 'pro', 1)
-  `).run(adminHash);
+  const adminRow = db.prepare("SELECT id, is_admin, membership FROM users WHERE email = '1604613739@qq.com'").get();
+  if (!adminRow) {
+    db.prepare(`INSERT INTO users (email, password_hash, membership, is_admin) VALUES ('1604613739@qq.com', ?, 'pro', 1)`).run(adminHash);
+    console.log('👑 超级管理员账号已创建: 1604613739@qq.com / 123456');
+  } else {
+    // 恢复后修正：确保 admin 权限和 Pro 会员
+    if (!adminRow.is_admin || adminRow.membership !== 'pro') {
+      db.prepare("UPDATE users SET is_admin = 1, membership = 'pro', membership_expires_at = NULL WHERE email = '1604613739@qq.com'").run();
+      console.log('👑 超级管理员权限已修正: 1604613739@qq.com (Pro + Admin)');
+    }
+  }
 
   console.log('✅ Reddit需求矿工 数据库初始化完成');
   console.log(`   路径: ${DB_PATH}`);
