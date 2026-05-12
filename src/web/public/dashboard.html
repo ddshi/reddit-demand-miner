@@ -167,6 +167,20 @@ if (!TOKEN) { window.location.href = '/login'; }
 document.getElementById('userEmail').textContent = CURRENT_USER.email || '...';
 document.getElementById('userPlan').textContent = (CURRENT_USER.membership || 'free').toUpperCase();
 
+// 检查管理员身份，如果有则显示管理入口
+api(API + '/me').then(function(r) { return r.json(); }).then(function(me) {
+  if (me.is_admin) {
+    var nav = document.querySelector('.sidebar .nav');
+    if (nav) {
+      var btn = document.createElement('a');
+      btn.href = '/admin'; btn.className = 'nav-item';
+      btn.style.cssText = 'display:block;padding:8px 12px;background:#d29922;color:#0d1117;border-radius:6px;text-decoration:none;font-size:13px;font-weight:600;margin-top:8px;text-align:center';
+      btn.textContent = '⚙️ 管理面板';
+      nav.appendChild(btn);
+    }
+  }
+}).catch(function() {});
+
 function showToast(msg, type) {
   var t = document.getElementById('toast');
   t.textContent = msg; t.className = 'toast toast-' + (type || 'success'); t.style.display = 'block';

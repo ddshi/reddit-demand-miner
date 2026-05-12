@@ -32,6 +32,7 @@ app.get('/', (req, res) => res.redirect('/dashboard'));
 app.get('/login', (req, res) => { res.setHeader('Cache-Control', 'no-store'); res.sendFile(path.join(__dirname, 'public', 'login.html')); });
 app.get('/register', (req, res) => { res.setHeader('Cache-Control', 'no-store'); res.sendFile(path.join(__dirname, 'public', 'register.html')); });
 app.get('/dashboard', (req, res) => { res.setHeader('Cache-Control', 'no-store'); res.sendFile(path.join(__dirname, 'public', 'dashboard.html')); });
+app.get('/admin', (req, res) => { res.setHeader('Cache-Control', 'no-store'); res.sendFile(path.join(__dirname, 'public', 'admin.html')); });
 
 // ============ 认证中间件 ============
 const PUBLIC_ROUTES = ['/health', '/plans', '/login', '/register', '/activate'];
@@ -48,6 +49,14 @@ app.use('/api', (req, res, next) => {
   if (PUBLIC_ROUTES.includes(req.path)) return next();
   return requireAuth(req, res, next);
 });
+
+// Admin middleware
+function requireAdmin(req, res, next) {
+  const db = getDb();
+  const user = db.prepare('SELECT is_admin FROM users WHERE id = ?').get(req.user_id);
+  if (!user || !user.is_admin) return res.status(403).json({ error: '需要管理员权限', code: 'ADMIN_REQUIRED' });
+  next();
+}
 
 // ============ 健康检查 ============
 app.get('/api/health', (req, res) => {
@@ -116,7 +125,7 @@ app.post('/api/login', (req, res) => {
 // ============ 获取当前用户 ============
 app.get('/api/me', (req, res) => {
   const db = getDb();
-  const user = db.prepare('SELECT id, email, membership, membership_expires_at, payment_ref, created_at, last_login_at FROM users WHERE id = ?').get(req.user_id);
+  const user = db.prepare('SELECT id, email, membership, membership_expires_at, is_admin, payment_ref, created_at, last_login_at FROM users WHERE id = ?').get(req.user_id);
   if (!user) return res.status(404).json({ error: '用户不存在' });
 
   const plan = getUserPlan(req.user_id);
@@ -216,16 +225,88 @@ app.post('/api/report/generate', (req, res) => {
   });
 });
 
-// ============ 管理员统计 ============
-app.get('/api/admin/stats', (req, res) => {
+// ============ 管理员 API（需 is_admin=1） ============
+
+// 获取用户列表
+app.get('/api/admin/users', requireAdmin, (req, res) => {
+  const db = getDb();
+  const users = db.prepare(`
+    SELECT id, email, membership, membership_expires_at, is_admin, payment_ref, created_at, last_login_at
+    FROM users ORDER BY created_at DESC
+  `).all();
+  res.json({ users });
+});
+
+// 手动添加用户
+app.post('/api/admin/users', requireAdmin, (req, res) => {
+  const { email, password, membership, expires_at } = req.body || {};
+  if (!email || !password || password.length < 6) {
+    return res.status(400).json({ error: '请输入有效邮箱和至少6位密码' });
+  }
+  const db = getDb();
+  const existing = db.prepare('SELECT id FROM users WHERE email = ?').get(email);
+  if (existing) return res.status(409).json({ error: '该邮箱已存在' });
+
+  const hash = crypto.createHash('sha256').update(password).digest('hex');
+  const tier = membership === 'pro' ? 'pro' : 'free';
+  db.prepare(`
+    INSERT INTO users (email, password_hash, membership, membership_expires_at)
+    VALUES (?, ?, ?, ?)
+  `).run(email, hash, tier, expires_at || null);
+  res.status(201).json({ message: `用户 ${email} 创建成功` });
+});
+
+// 修改用户信息
+app.put('/api/admin/users/:id', requireAdmin, (req, res) => {
+  const { id } = req.params;
+  const { email, password, membership, expires_at, is_admin } = req.body || {};
+  const db = getDb();
+  const user = db.prepare('SELECT * FROM users WHERE id = ?').get(id);
+  if (!user) return res.status(404).json({ error: '用户不存在' });
+
+  const updates = [];
+  const params = [];
+
+  if (email) { updates.push('email = ?'); params.push(email); }
+  if (password) {
+    updates.push('password_hash = ?');
+    params.push(crypto.createHash('sha256').update(password).digest('hex'));
+  }
+  if (membership) { updates.push('membership = ?'); params.push(membership); }
+  if (expires_at !== undefined) { updates.push('membership_expires_at = ?'); params.push(expires_at || null); }
+  if (is_admin !== undefined) { updates.push('is_admin = ?'); params.push(is_admin ? 1 : 0); }
+
+  if (updates.length === 0) return res.status(400).json({ error: '没有需要修改的字段' });
+
+  params.push(id);
+  db.prepare(`UPDATE users SET ${updates.join(', ')} WHERE id = ?`).run(...params);
+
+  const updated = db.prepare('SELECT id, email, membership, membership_expires_at, is_admin FROM users WHERE id = ?').get(id);
+  res.json({ message: '用户信息已更新', user: updated });
+});
+
+// 删除用户
+app.delete('/api/admin/users/:id', requireAdmin, (req, res) => {
+  const { id } = req.params;
+  const db = getDb();
+  const user = db.prepare('SELECT id, email FROM users WHERE id = ?').get(id);
+  if (!user) return res.status(404).json({ error: '用户不存在' });
+  if (user.email === '1604613739@qq.com') return res.status(403).json({ error: '不能删除超级管理员' });
+
+  db.prepare('DELETE FROM sessions WHERE user_id = ?').run(id);
+  db.prepare('DELETE FROM payment_records WHERE user_id = ?').run(id);
+  db.prepare('DELETE FROM users WHERE id = ?').run(id);
+  res.json({ message: `用户 ${user.email} 已删除` });
+});
+
+// 统计（管理员）
+app.get('/api/admin/stats', requireAdmin, (req, res) => {
   res.json(getAdminStats());
 });
 
-// ============ 激活码管理（管理员） ============
-app.post('/api/admin/codes', (req, res) => {
-  const { admin_key, plan, count, days } = req.body || {};
-  if (admin_key !== 'admin_rdm_2026') return res.status(403).json({ error: '无权限' });
-
+// 激活码管理
+app.post('/api/admin/codes', requireAdmin, (req, res) => {
+  const { plan, count, days } = req.body || {};
   const db = getDb();
   const codes = [];
   for (let i = 0; i < (count || 1); i++) {
@@ -234,6 +315,20 @@ app.post('/api/admin/codes', (req, res) => {
     codes.push(code);
   }
   res.json({ codes });
+});
+
+// 获取所有激活码
+app.get('/api/admin/codes', requireAdmin, (req, res) => {
+  const db = getDb();
+  const codes = db.prepare('SELECT * FROM activation_codes ORDER BY created_at DESC').all();
+  res.json({ codes });
+});
+
+// 支付确认
+app.post('/api/payment/confirm', requireAdmin, (req, res) => {
+  const { transaction_id } = req.body || {};
+  const result = confirmPayment(transaction_id);
+  res.json(result);
 });
 
 // ============ 用户数据备份/恢复 ============
@@ -269,9 +364,9 @@ function restoreUsersFromBackup() {
       console.log(`✅ 已有 ${cnt} 个用户，跳过恢复`);
       return;
     }
-    const insU = db.prepare(`INSERT OR IGNORE INTO users (id, email, password_hash, membership, membership_expires_at, created_at, last_login_at) VALUES (?, ?, ?, ?, ?, ?, ?)`);
+    const insU = db.prepare(`INSERT OR IGNORE INTO users (id, email, password_hash, membership, membership_expires_at, is_admin, created_at, last_login_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)`);
     for (const u of backup.users) {
-      insU.run(u.id, u.email, u.password_hash, u.membership || 'free', u.membership_expires_at, u.created_at, u.last_login_at);
+      insU.run(u.id, u.email, u.password_hash, u.membership || 'free', u.membership_expires_at, u.is_admin || 0, u.created_at, u.last_login_at);
     }
     if (backup.sessions) {
       const insS = db.prepare(`INSERT OR IGNORE INTO sessions (token, user_id, created_at, expires_at) VALUES (?, ?, ?, ?)`);

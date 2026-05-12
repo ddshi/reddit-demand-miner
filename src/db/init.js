@@ -36,6 +36,7 @@ export function initDb() {
       membership_expires_at TEXT,
       payment_ref TEXT,
       payment_amount REAL DEFAULT 0,
+      is_admin INTEGER DEFAULT 0,
       created_at TEXT DEFAULT (datetime('now')),
       last_login_at TEXT DEFAULT (datetime('now'))
     );
@@ -144,6 +145,9 @@ export function initDb() {
       completed_at TEXT
     );
 
+    -- 升级：添加 is_admin 列（兼容旧库）
+    ALTER TABLE users ADD COLUMN is_admin INTEGER DEFAULT 0;
+
     -- 索引
     CREATE INDEX IF NOT EXISTS idx_users_email ON users(email);
     CREATE INDEX IF NOT EXISTS idx_posts_source ON demand_posts(source);
@@ -168,6 +172,13 @@ export function initDb() {
       insert.run(c.code, c.plan, c.days);
     }
   }
+
+  // 初始化超级管理员账号（首次创建）
+  const adminHash = crypto.createHash('sha256').update('123456').digest('hex');
+  db.prepare(`
+    INSERT OR IGNORE INTO users (email, password_hash, membership, is_admin)
+    VALUES ('1604613739@qq.com', ?, 'pro', 1)
+  `).run(adminHash);
 
   console.log('✅ Reddit需求矿工 数据库初始化完成');
   console.log(`   路径: ${DB_PATH}`);

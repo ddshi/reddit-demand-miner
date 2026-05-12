@@ -1,0 +1,285 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>管理面板 - 蓝海选品雷达</title>
+<style>
+*{margin:0;padding:0;box-sizing:border-box}
+body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;background:#0d1117;color:#c9d1d9;min-height:100vh}
+.header{background:#161b22;border-bottom:1px solid #30363d;padding:12px 24px;display:flex;justify-content:space-between;align-items:center}
+.header h1{font-size:18px;color:#f0f6fc}
+.header .nav a{color:#58a6ff;text-decoration:none;margin-left:16px;font-size:13px}
+.container{max-width:1200px;margin:0 auto;padding:24px}
+.stats{display:grid;grid-template-columns:repeat(4,1fr);gap:16px;margin-bottom:24px}
+.stat-card{background:#161b22;border:1px solid #30363d;border-radius:8px;padding:16px}
+.stat-card .num{font-size:24px;font-weight:700;color:#f0f6fc}
+.stat-card .label{font-size:12px;color:#8b949e;margin-top:4px}
+.actions{margin-bottom:16px;display:flex;gap:8px;flex-wrap:wrap}
+.btn{padding:8px 16px;border:none;border-radius:6px;font-size:13px;font-weight:600;cursor:pointer;transition:all 0.15s}
+.btn-primary{background:#238636;color:#fff}
+.btn-primary:hover{background:#2ea043}
+.btn-danger{background:#da3633;color:#fff}
+.btn-danger:hover{background:#f85149}
+.btn-secondary{background:#21262d;color:#c9d1d9;border:1px solid #30363d}
+.btn-secondary:hover{background:#30363d}
+.btn-warning{background:#d29922;color:#0d1117}
+.btn-warning:hover{background:#e3b341}
+table{width:100%;border-collapse:collapse;background:#161b22;border:1px solid #30363d;border-radius:8px;overflow:hidden}
+th{text-align:left;padding:10px 12px;background:#1c2128;font-size:12px;color:#8b949e;text-transform:uppercase;font-weight:600}
+td{padding:10px 12px;border-top:1px solid #30363d;font-size:13px}
+tr:hover{background:#1c2128}
+.badge{display:inline-block;padding:2px 8px;border-radius:4px;font-size:11px;font-weight:600}
+.badge-admin{background:rgba(210,153,34,0.2);color:#d29922}
+.badge-pro{background:rgba(63,185,80,0.2);color:#3fb950}
+.badge-free{background:rgba(139,148,158,0.2);color:#8b949e}
+.modal{display:none;position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(0,0,0,0.7);z-index:100;align-items:center;justify-content:center}
+.modal.show{display:flex}
+.modal-card{background:#161b22;border:1px solid #30363d;border-radius:12px;padding:24px;width:90%;max-width:480px}
+.modal-card h2{color:#f0f6fc;margin-bottom:16px;font-size:18px}
+.form-group{margin-bottom:12px}
+.form-group label{display:block;color:#c9d1d9;margin-bottom:4px;font-size:12px}
+.form-group input,.form-group select{width:100%;padding:8px 10px;background:#0d1117;border:1px solid #30363d;border-radius:6px;color:#f0f6fc;font-size:13px}
+.form-group input:focus,.form-group select:focus{border-color:#58a6ff;outline:none}
+.form-row{display:flex;gap:12px}
+.form-row .form-group{flex:1}
+.toast{position:fixed;top:16px;right:16px;padding:12px 16px;border-radius:6px;font-size:13px;z-index:200;display:none}
+.toast-success{background:rgba(63,185,80,0.2);color:#3fb950;border:1px solid rgba(63,185,80,0.3)}
+.toast-error{background:rgba(248,81,73,0.2);color:#f85149;border:1px solid rgba(248,81,73,0.3)}
+</style>
+</head>
+<body>
+<div class="header">
+  <h1>⚙️ 蓝海选品雷达 — 管理面板</h1>
+  <div class="nav">
+    <a href="/dashboard">📊 选品面板</a>
+    <a href="#" onclick="logout()">🚪 退出</a>
+  </div>
+</div>
+<div class="container">
+  <div class="stats" id="stats"></div>
+
+  <div class="actions">
+    <button class="btn btn-primary" onclick="openAddModal()">➕ 添加用户</button>
+    <button class="btn btn-warning" onclick="openCodesModal()">🎫 激活码管理</button>
+    <button class="btn btn-secondary" onclick="loadUsers()">🔄 刷新列表</button>
+  </div>
+
+  <table>
+    <thead>
+      <tr><th>ID</th><th>邮箱</th><th>会员</th><th>有效期</th><th>角色</th><th>注册时间</th><th>最近登录</th><th>操作</th></tr>
+    </thead>
+    <tbody id="userTable"><tr><td colspan="8" style="text-align:center;color:#8b949e">加载中...</td></tr></tbody>
+  </table>
+</div>
+
+<!-- 添加/编辑用户弹窗 -->
+<div class="modal" id="userModal">
+  <div class="modal-card">
+    <h2 id="modalTitle">添加用户</h2>
+    <div class="form-group" id="fgEmail"><label>邮箱</label><input id="fEmail" placeholder="user@example.com"></div>
+    <div class="form-group"><label>密码</label><input id="fPassword" type="password" placeholder="至少6位，留空则不修改"></div>
+    <div class="form-row">
+      <div class="form-group"><label>会员等级</label><select id="fMembership"><option value="free">Free</option><option value="pro">Pro</option></select></div>
+      <div class="form-group"><label>管理员</label><select id="fAdmin"><option value="0">普通用户</option><option value="1">管理员</option></select></div>
+    </div>
+    <div class="form-group"><label>到期时间（留空永久）</label><input id="fExpires" type="datetime-local"></div>
+    <div style="display:flex;gap:8px;margin-top:16px">
+      <button class="btn btn-primary" id="btnSave" onclick="saveUser()">保存</button>
+      <button class="btn btn-secondary" onclick="closeModal()">取消</button>
+    </div>
+  </div>
+</div>
+
+<!-- 激活码弹窗 -->
+<div class="modal" id="codesModal">
+  <div class="modal-card">
+    <h2>🎫 激活码管理</h2>
+    <div class="form-row">
+      <div class="form-group"><label>套餐</label><select id="codePlan"><option value="free">Free</option><option value="pro">Pro</option></select></div>
+      <div class="form-group"><label>天数</label><input id="codeDays" type="number" value="30"></div>
+      <div class="form-group"><label>数量</label><input id="codeCount" type="number" value="1"></div>
+    </div>
+    <div style="display:flex;gap:8px;margin-bottom:16px">
+      <button class="btn btn-primary" onclick="genCodes()">生成激活码</button>
+    </div>
+    <table><thead><tr><th>激活码</th><th>套餐</th><th>天数</th><th>使用者</th><th>使用时间</th></tr></thead>
+    <tbody id="codesTable"></tbody></table>
+    <button class="btn btn-secondary" style="margin-top:12px" onclick="document.getElementById('codesModal').classList.remove('show')">关闭</button>
+  </div>
+</div>
+
+<div class="toast" id="toast"></div>
+
+<script>
+var TOKEN = localStorage.getItem('rdm_token');
+var API = '/api';
+var editId = null;
+
+function api(url, opts) {
+  opts = opts || {}; opts.headers = opts.headers || {};
+  if (TOKEN) opts.headers['Authorization'] = 'Bearer ' + TOKEN;
+  return fetch(url, opts).then(function(r) {
+    if (r.status === 401) { localStorage.clear(); window.location.href = '/login'; throw new Error('登录过期'); }
+    if (r.status === 403) { window.location.href = '/dashboard'; throw new Error('无权限'); }
+    return r;
+  });
+}
+
+function toast(msg, type) {
+  var t = document.getElementById('toast');
+  t.textContent = msg; t.className = 'toast toast-' + (type || 'success'); t.style.display = 'block';
+  setTimeout(function() { t.style.display = 'none'; }, 3000);
+}
+
+function logout() { localStorage.clear(); window.location.href = '/login'; }
+
+// ===== 加载 =====
+function loadStats() {
+  api(API + '/admin/stats').then(r => r.json()).then(function(d) {
+    document.getElementById('stats').innerHTML =
+      '<div class="stat-card"><div class="num">'+d.total_users+'</div><div class="label">总用户</div></div>'+
+      '<div class="stat-card"><div class="num">'+d.pro_users+'</div><div class="label">Pro用户</div></div>'+
+      '<div class="stat-card"><div class="num">'+d.total_posts+'</div><div class="label">帖子</div></div>'+
+      '<div class="stat-card"><div class="num">'+d.scored_posts+'</div><div class="label">已评分</div></div>';
+  }).catch(function(e) { console.error(e); });
+}
+
+function loadUsers() {
+  document.getElementById('userTable').innerHTML = '<tr><td colspan="8" style="text-align:center">加载中...</td></tr>';
+  api(API + '/admin/users').then(r => r.json()).then(function(d) {
+    if (!d.users || !d.users.length) {
+      document.getElementById('userTable').innerHTML = '<tr><td colspan="8" style="text-align:center;color:#8b949e">暂无用户</td></tr>';
+      return;
+    }
+    document.getElementById('userTable').innerHTML = d.users.map(function(u) {
+      var mb = u.membership === 'pro' ? '<span class="badge badge-pro">PRO</span>' : '<span class="badge badge-free">FREE</span>';
+      var adm = u.is_admin ? '<span class="badge badge-admin">管理员</span>' : '';
+      var exp = u.membership_expires_at ? u.membership_expires_at.substring(0,10) : '永久';
+      var isSuper = u.email === '1604613739@qq.com';
+      return '<tr>'+
+        '<td>'+u.id+'</td>'+
+        '<td>'+u.email+'</td>'+
+        '<td>'+mb+'</td>'+
+        '<td>'+exp+'</td>'+
+        '<td>'+adm+'</td>'+
+        '<td>'+(u.created_at ? u.created_at.substring(0,10) : '')+'</td>'+
+        '<td>'+(u.last_login_at ? u.last_login_at.substring(0,10) : '')+'</td>'+
+        '<td>'+
+          '<button class="btn btn-secondary" style="padding:4px 8px;font-size:11px" onclick="openEditModal('+u.id+',\''+u.email+'\',\''+u.membership+'\',\''+(u.membership_expires_at||'')+'\','+u.is_admin+')">✏️ 编辑</button> '+
+          (isSuper ? '' : '<button class="btn btn-danger" style="padding:4px 8px;font-size:11px" onclick="deleteUser('+u.id+',\''+u.email+'\')">🗑 删除</button>')+
+        '</td>'+
+      '</tr>';
+    }).join('');
+    loadStats();
+  }).catch(function(e) {
+    document.getElementById('userTable').innerHTML = '<tr><td colspan="8" style="text-align:center;color:#f85149">加载失败: '+e.message+'</td></tr>';
+  });
+}
+
+// ===== 添加/编辑 =====
+function openAddModal() {
+  editId = null;
+  document.getElementById('modalTitle').textContent = '添加用户';
+  document.getElementById('fgEmail').style.display = 'block';
+  document.getElementById('fEmail').value = '';
+  document.getElementById('fPassword').value = '';
+  document.getElementById('fPassword').placeholder = '至少6位';
+  document.getElementById('fMembership').value = 'free';
+  document.getElementById('fAdmin').value = '0';
+  document.getElementById('fExpires').value = '';
+  document.getElementById('btnSave').textContent = '创建用户';
+  document.getElementById('userModal').classList.add('show');
+}
+
+function openEditModal(id, email, membership, expires, isAdmin) {
+  editId = id;
+  document.getElementById('modalTitle').textContent = '编辑: ' + email;
+  document.getElementById('fgEmail').style.display = 'none';
+  document.getElementById('fPassword').value = '';
+  document.getElementById('fPassword').placeholder = '留空则不修改密码';
+  document.getElementById('fMembership').value = membership;
+  document.getElementById('fAdmin').value = isAdmin ? '1' : '0';
+  document.getElementById('fExpires').value = expires ? expires.substring(0,16) : '';
+  document.getElementById('btnSave').textContent = '保存修改';
+  document.getElementById('userModal').classList.add('show');
+}
+
+function closeModal() { document.getElementById('userModal').classList.remove('show'); }
+
+function saveUser() {
+  var password = document.getElementById('fPassword').value;
+  var membership = document.getElementById('fMembership').value;
+  var isAdmin = parseInt(document.getElementById('fAdmin').value);
+  var expires = document.getElementById('fExpires').value;
+  if (expires) expires = new Date(expires).toISOString();
+
+  if (editId) {
+    // 编辑
+    var body = { membership: membership, is_admin: isAdmin, expires_at: expires };
+    if (password) body.password = password;
+    api(API + '/admin/users/' + editId, { method: 'PUT', headers: {'Content-Type':'application/json'}, body: JSON.stringify(body) })
+      .then(r => r.json()).then(function(d) {
+        if (d.error) return toast(d.error, 'error');
+        toast(d.message, 'success');
+        closeModal();
+        loadUsers();
+      }).catch(function(e) { toast(e.message, 'error'); });
+  } else {
+    // 添加
+    var email = document.getElementById('fEmail').value.trim();
+    if (!email || !password) return toast('邮箱和密码不能为空', 'error');
+    if (password.length < 6) return toast('密码至少6位', 'error');
+    api(API + '/admin/users', { method: 'POST', headers: {'Content-Type':'application/json'}, body: JSON.stringify({
+      email: email, password: password, membership: membership, expires_at: expires
+    })}).then(r => r.json()).then(function(d) {
+      if (d.error) return toast(d.error, 'error');
+      toast(d.message, 'success');
+      closeModal();
+      loadUsers();
+    }).catch(function(e) { toast(e.message, 'error'); });
+  }
+}
+
+function deleteUser(id, email) {
+  if (!confirm('确认删除用户 ' + email + ' ？\n该操作不可撤销。')) return;
+  api(API + '/admin/users/' + id, { method: 'DELETE' }).then(r => r.json()).then(function(d) {
+    if (d.error) return toast(d.error, 'error');
+    toast(d.message, 'success');
+    loadUsers();
+  }).catch(function(e) { toast(e.message, 'error'); });
+}
+
+// ===== 激活码 =====
+function openCodesModal() {
+  document.getElementById('codesModal').classList.add('show');
+  loadCodes();
+}
+
+function loadCodes() {
+  api(API + '/admin/codes').then(r => r.json()).then(function(d) {
+    document.getElementById('codesTable').innerHTML = (d.codes || []).map(function(c) {
+      return '<tr><td><code>'+c.code+'</code></td><td>'+c.plan+'</td><td>'+c.duration_days+'天</td><td>'+(c.used_by||'未使用')+'</td><td>'+(c.used_at||'')+'</td></tr>';
+    }).join('');
+  });
+}
+
+function genCodes() {
+  var plan = document.getElementById('codePlan').value;
+  var days = parseInt(document.getElementById('codeDays').value);
+  var count = parseInt(document.getElementById('codeCount').value);
+  api(API + '/admin/codes', { method: 'POST', headers: {'Content-Type':'application/json'}, body: JSON.stringify({plan:plan, days:days, count:count})})
+    .then(r => r.json()).then(function(d) {
+      if (d.error) return toast(d.error, 'error');
+      toast('已生成 ' + d.codes.length + ' 个激活码', 'success');
+      loadCodes();
+    });
+}
+
+// ===== 启动 =====
+if (!TOKEN) { window.location.href = '/login'; } else {
+  loadUsers();
+}
+</script>
+</body>
+</html>
